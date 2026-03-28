@@ -15,7 +15,8 @@
     "dev": "ts-node src/index.ts",
     "start": "node dist/index.js",
     "test": "node dist/index.js --help",
-    "eval": "ts-node src/eval/run.ts"
+    "eval": "ts-node src/eval/run.ts",
+    "eval:live": "ts-node src/eval/live.ts"
   },
   "keywords": [],
   "author": "",

@@ -93,6 +93,20 @@ Run the offline evaluation suite:
 npm test
 ```
 
+### Live eval (real LLM)
+
+Run a smoke regression against a real OpenAI-compatible provider:
+
+```bash
+export CODECLI_PROVIDER=kimi
+export CODECLI_BASE_URL=https://api.moonshot.cn
+export CODECLI_MODEL=moonshot-v1-8k
+export CODECLI_API_KEY=sk-...
+
+export CODECLI_EVAL_WORKSPACE=/Users/cabbos/project/projects/agent_learning_tracker
+npm -w apps/code-cli run eval:live
+```
+
 ## Future Roadmap
 
 - Expand Git tools (`git.add`, `git.commit`).

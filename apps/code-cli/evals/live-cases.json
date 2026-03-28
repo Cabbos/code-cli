@@ -1,0 +1,10 @@
+{
+  "cases": [
+    {
+      "name": "live_search_todo_count",
+      "prompt": "Use search.rg to find all occurrences of \"TODO\" under the workspace and then answer with only the total count as a number.",
+      "expectToolContains": "\"matches\"",
+      "expectOutputRegex": "^[0-9]+$"
+    }
+  ]
+}
