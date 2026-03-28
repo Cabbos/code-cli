@@ -1,0 +1,17 @@
+{
+  "name": "code-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm -w apps/code-cli run build",
+    "dev": "npm -w apps/code-cli run dev",
+    "start": "npm -w apps/code-cli run start",
+    "test": "npm -w apps/code-cli run test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Workspace root"
+}

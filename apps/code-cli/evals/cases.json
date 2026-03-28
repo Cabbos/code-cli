@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "name": "echo",
+      "prompt": "hello",
+      "expectContains": "mock:hello"
+    },
+    {
+      "name": "tool_list_files",
+      "prompt": "tool:fs.listFiles {\"dir\":\"apps\",\"recursive\":false}",
+      "expectContains": "mock:tool_result:fs.listFiles"
+    },
+    {
+      "name": "tool_search_rg",
+      "prompt": "tool:search.rg {\"pattern\":\"runAgentTurn\",\"dir\":\"apps/code-cli/src\",\"maxResults\":5}",
+      "expectContains": "runAgentTurn"
+    },
+    {
+      "name": "tool_apply_patch_missing",
+      "prompt": "tool:fs.applyPatch {\"path\":\"__missing__.txt\",\"patch\":\"@@ -1 +1 @@\\n-a\\n+b\\n\"}",
+      "expectContains": "File not found"
+    },
+    {
+      "name": "tool_git_diff",
+      "prompt": "tool:git.diff {\"contextLines\":1,\"maxBytes\":5000}",
+      "expectContains": "\"isRepo\""
+    },
+    {
+      "name": "tool_git_status",
+      "prompt": "tool:git.status {\"maxBytes\":5000}",
+      "expectContains": "\"entries\""
+    }
+  ]
+}
