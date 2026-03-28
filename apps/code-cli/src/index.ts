@@ -6,6 +6,7 @@ import { createProvider } from "./llm/factory"
 import { createDefaultToolRegistry } from "./tools/defaultRegistry"
 import { Workspace } from "./core/workspace"
 import { createInitialMessages, runAgentTurn } from "./agent/runAgent"
+import { createJsonlTraceWriter } from "./agent/trace"
 import readline from "node:readline/promises"
 import process from "node:process"
 import path from "node:path"
@@ -81,7 +82,22 @@ program
   .argument("<prompt...>", "Prompt text")
   .option("--no-stream", "Disable streaming output")
   .option("--max-steps <n>", "Max tool-call iterations", (v) => Number(v), 8)
-  .action(async (promptParts: string[], opts: { stream: boolean; maxSteps: number }) => {
+  .option("--max-tool-output <n>", "Max chars per tool result", (v) => Number(v))
+  .option("--max-total-tool-output <n>", "Max chars across tool results in one turn", (v) => Number(v))
+  .option("--trace", "Write JSONL trace to a file")
+  .option("--trace-file <path>", "Trace output file path")
+  .action(
+    async (
+      promptParts: string[],
+      opts: {
+        stream: boolean
+        maxSteps: number
+        maxToolOutput?: number
+        maxTotalToolOutput?: number
+        trace?: boolean
+        traceFile?: string
+      }
+    ) => {
     const config = await resolveConfig()
     const { provider, model } = createProvider(config.llm)
     const root = (program.opts() as GlobalOpts).workspace
@@ -90,20 +106,52 @@ program
     const prompt = promptParts.join(" ")
     const messages = createInitialMessages(config.agent.systemPrompt ?? "You are a coding agent.")
     const confirm = await createConfirmFn({ enabled: Boolean(config.tools.confirmWrites) })
-    const out = await runAgentTurn({
-      provider,
+    const traceWriter =
+      opts.trace || typeof opts.traceFile === "string"
+        ? await createJsonlTraceWriter(opts.traceFile ?? defaultTraceFile(root, `run-${Date.now()}.jsonl`))
+        : undefined
+    const trace = traceWriter ? traceWriter.write : undefined
+    trace?.({
+      type: "run.start",
+      mode: "run",
+      ts: Date.now(),
+      provider: config.llm.provider,
       model,
-      workspace,
-      tools,
-      messages,
-      userInput: prompt,
-      ...(typeof config.agent.systemPrompt === "string" ? { systemPrompt: config.agent.systemPrompt } : {}),
-      ...(typeof opts.stream === "boolean" ? { stream: opts.stream } : {}),
-      ...(typeof opts.maxSteps === "number" ? { maxSteps: opts.maxSteps } : {}),
-      ...(confirm ? { confirm } : {}),
-      ...(shouldSanitizeToolNames(config.llm.provider) ? { sanitizeToolNames: true } : {})
+      workspace: root,
+      maxSteps: opts.maxSteps,
+      ...(typeof opts.maxToolOutput === "number" ? { maxToolResultChars: opts.maxToolOutput } : {}),
+      ...(typeof opts.maxTotalToolOutput === "number" ? { maxTotalToolResultChars: opts.maxTotalToolOutput } : {}),
+      promptPreview: truncateForTrace(prompt)
     })
-    if (!opts.stream) process.stdout.write(`${out.content}\n`)
+    try {
+      const out = await runAgentTurn({
+        provider,
+        model,
+        workspace,
+        tools,
+        messages,
+        userInput: prompt,
+        ...(typeof config.agent.systemPrompt === "string" ? { systemPrompt: config.agent.systemPrompt } : {}),
+        ...(typeof opts.stream === "boolean" ? { stream: opts.stream } : {}),
+        ...(typeof opts.maxSteps === "number" ? { maxSteps: opts.maxSteps } : {}),
+        ...(typeof opts.maxToolOutput === "number" ? { maxToolResultChars: opts.maxToolOutput } : {}),
+        ...(typeof opts.maxTotalToolOutput === "number" ? { maxTotalToolResultChars: opts.maxTotalToolOutput } : {}),
+        ...(confirm ? { confirm } : {}),
+        ...(trace ? { trace } : {}),
+        ...(shouldSanitizeToolNames(config.llm.provider) ? { sanitizeToolNames: true } : {})
+      })
+      if (!opts.stream) process.stdout.write(`${out.content}\n`)
+      trace?.({
+        type: "run.end",
+        mode: "run",
+        ts: Date.now(),
+        outputChars: out.content.length,
+        outputPreview: truncateForTrace(out.content),
+        messageCount: out.messages.length
+      })
+    } finally {
+      if (traceWriter) await traceWriter.close()
+    }
   })
 
 program
@@ -112,7 +160,20 @@ program
   .option("--session <id>", "Resume an existing session id")
   .option("--no-stream", "Disable streaming output")
   .option("--max-steps <n>", "Max tool-call iterations per turn", (v) => Number(v), 8)
-  .action(async (opts: { session?: string; stream: boolean; maxSteps: number }) => {
+  .option("--max-tool-output <n>", "Max chars per tool result", (v) => Number(v))
+  .option("--max-total-tool-output <n>", "Max chars across tool results in one turn", (v) => Number(v))
+  .option("--trace", "Write JSONL trace to a file")
+  .option("--trace-file <path>", "Trace output file path")
+  .action(
+    async (opts: {
+      session?: string
+      stream: boolean
+      maxSteps: number
+      maxToolOutput?: number
+      maxTotalToolOutput?: number
+      trace?: boolean
+      traceFile?: string
+    }) => {
     const config = await resolveConfig()
     const { provider, model } = createProvider(config.llm)
     const root = (program.opts() as GlobalOpts).workspace
@@ -127,27 +188,60 @@ program
     process.stdout.write(chalk.dim(`session: ${session.id}\n`))
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
     const confirm = await createConfirmFn({ enabled: Boolean(config.tools.confirmWrites) })
-    while (true) {
-      const line = (await rl.question(chalk.cyan("> "))).trim()
-      if (!line) continue
-      if (line === ":q" || line === ":quit" || line === ":exit") break
-      const out = await runAgentTurn({
-        provider,
-        model,
-        workspace,
-        tools,
-        messages: session.messages,
-        userInput: line,
-        ...(typeof systemPrompt === "string" ? { systemPrompt } : {}),
-        ...(typeof opts.stream === "boolean" ? { stream: opts.stream } : {}),
-        ...(typeof opts.maxSteps === "number" ? { maxSteps: opts.maxSteps } : {}),
-        ...(confirm ? { confirm } : {}),
-        ...(shouldSanitizeToolNames(config.llm.provider) ? { sanitizeToolNames: true } : {})
-      })
-      await store.save(session)
-      if (!opts.stream) process.stdout.write(`${out.content}\n`)
+    const traceWriter =
+      opts.trace || typeof opts.traceFile === "string"
+        ? await createJsonlTraceWriter(opts.traceFile ?? defaultTraceFile(root, `chat-${session.id}.jsonl`))
+        : undefined
+    const trace = traceWriter ? traceWriter.write : undefined
+    trace?.({
+      type: "chat.start",
+      mode: "chat",
+      ts: Date.now(),
+      sessionId: session.id,
+      provider: config.llm.provider,
+      model,
+      workspace: root,
+      maxSteps: opts.maxSteps,
+      ...(typeof opts.maxToolOutput === "number" ? { maxToolResultChars: opts.maxToolOutput } : {}),
+      ...(typeof opts.maxTotalToolOutput === "number" ? { maxTotalToolResultChars: opts.maxTotalToolOutput } : {})
+    })
+    try {
+      while (true) {
+        const line = (await rl.question(chalk.cyan("> "))).trim()
+        if (!line) continue
+        if (line === ":q" || line === ":quit" || line === ":exit") break
+        trace?.({ type: "turn.start", ts: Date.now(), inputPreview: truncateForTrace(line) })
+        const out = await runAgentTurn({
+          provider,
+          model,
+          workspace,
+          tools,
+          messages: session.messages,
+          userInput: line,
+          ...(typeof systemPrompt === "string" ? { systemPrompt } : {}),
+          ...(typeof opts.stream === "boolean" ? { stream: opts.stream } : {}),
+          ...(typeof opts.maxSteps === "number" ? { maxSteps: opts.maxSteps } : {}),
+          ...(typeof opts.maxToolOutput === "number" ? { maxToolResultChars: opts.maxToolOutput } : {}),
+          ...(typeof opts.maxTotalToolOutput === "number" ? { maxTotalToolResultChars: opts.maxTotalToolOutput } : {}),
+          ...(confirm ? { confirm } : {}),
+          ...(trace ? { trace } : {}),
+          ...(shouldSanitizeToolNames(config.llm.provider) ? { sanitizeToolNames: true } : {})
+        })
+        trace?.({
+          type: "turn.end",
+          ts: Date.now(),
+          outputChars: out.content.length,
+          outputPreview: truncateForTrace(out.content),
+          messageCount: out.messages.length
+        })
+        await store.save(session)
+        if (!opts.stream) process.stdout.write(`${out.content}\n`)
+      }
+    } finally {
+      rl.close()
+      trace?.({ type: "chat.end", mode: "chat", ts: Date.now(), sessionId: session.id, messageCount: session.messages.length })
+      if (traceWriter) await traceWriter.close()
     }
-    rl.close()
   })
 
 const sessionCmd = program.command("session").description("Manage sessions")
@@ -224,6 +318,16 @@ function toToolPolicy(config: CodeCliConfig): ToolPolicy {
 function shouldSanitizeToolNames(provider: string): boolean {
   const p = provider.toLowerCase()
   return p === "openai" || p === "openai-compatible" || p === "kimi" || p === "moonshot"
+}
+
+function defaultTraceFile(workspaceRoot: string, basename: string): string {
+  return path.join(workspaceRoot, ".code-cli", "traces", basename)
+}
+
+function truncateForTrace(s: string, max = 200): string {
+  const out = s.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim()
+  if (out.length <= max) return out
+  return `${out.slice(0, max)}…`
 }
 
 async function createConfirmFn(opts: { enabled: boolean }) {

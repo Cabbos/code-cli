@@ -29,6 +29,16 @@
       "name": "tool_git_status",
       "prompt": "tool:git.status {\"maxBytes\":5000}",
       "expectContains": "\"entries\""
+    },
+    {
+      "name": "tool_invalid_input_type",
+      "prompt": "tool:git.status {\"paths\":\"not-an-array\"}",
+      "expectContains": "Invalid tool input"
+    },
+    {
+      "name": "tool_invalid_input_extra_field",
+      "prompt": "tool:git.status {\"maxBytes\":5000,\"nope\":true}",
+      "expectContains": "is not allowed"
     }
   ]
 }

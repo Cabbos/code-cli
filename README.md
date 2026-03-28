@@ -11,6 +11,7 @@ Built with Node.js, TypeScript, and designed to help developers explore AI agent
 - **Session Management**: Chat loops are saved locally and can be resumed or exported.
 - **Config & Policies**: Support for `readonly` mode, write confirmations, and tool allow/deny lists.
 - **Offline Evals**: A lightweight evaluation runner to verify tool behavior without hitting LLM APIs.
+- **Tracing & Replay**: JSONL trace output for debugging and offline tool-call replay.
 
 ## Project Structure
 
@@ -91,6 +92,42 @@ Run the offline evaluation suite:
 
 ```bash
 npm test
+```
+
+### Trace (JSONL)
+
+```bash
+./node_modules/.bin/ccode run "tool:git.status {\"maxBytes\":5000}" --no-stream --trace
+```
+
+Trace files are written under `<workspace>/.code-cli/traces/` by default.
+
+### Replay eval (offline tool-call replay)
+
+Re-run the recorded tool calls without hitting any LLM provider:
+
+```bash
+npm -w apps/code-cli run eval:replay -- --trace .code-cli/traces/<trace>.jsonl --ignore-output
+```
+
+Notes:
+- Replay runs in readonly mode by default. Add `--allow-writes` to replay write tools.
+- Omit `--ignore-output` to compare tool result hashes to the trace.
+
+### Trace fixtures (CI-friendly)
+
+This repo includes committed JSONL trace fixtures under `apps/code-cli/evals/fixtures/` so CI can replay tool calls without any real LLM.
+
+Regenerate fixtures:
+
+```bash
+npm -w apps/code-cli run eval:trace
+```
+
+Replay fixtures:
+
+```bash
+npm -w apps/code-cli run eval:replay:fixtures
 ```
 
 ### Live eval (real LLM)

@@ -1,0 +1,14 @@
+{"type":"run.start","mode":"fixture","name":"replay-strict","ts":1774709566792,"workspace":"/Users/cabbos/project/projects/code-monorepo/apps/code-cli/evals/replay-workspace"}
+{"type":"turn.start","ts":1774709566792,"inputPreview":"tool:fs.readFile {\"path\":\"hello.txt\"}"}
+{"type":"llm.complete","step":0,"durationMs":0,"contentChars":0,"toolCalls":[{"id":"mock-4","name":"fs.readFile"}]}
+{"type":"tool.call","step":0,"toolCallId":"mock-4","name":"fs.readFile","internalName":"fs.readFile","input":{"path":"hello.txt"}}
+{"type":"tool.result","step":0,"toolCallId":"mock-4","durationMs":0,"name":"fs.readFile","internalName":"fs.readFile","resultChars":40,"truncated":false,"rawChars":40,"rawHash":"720fd429ff16fc2474ad45d25205abf7ec7d98247c8ee4d5976135759e454631","rawPreview":"{ \"content\": \"hello\\nTODO: sample\\n\" }"}
+{"type":"llm.complete","step":1,"durationMs":0,"contentChars":69,"toolCalls":[]}
+{"type":"turn.end","ts":1774709566792,"outputChars":69}
+{"type":"turn.start","ts":1774709566792,"inputPreview":"tool:search.rg {\"pattern\":\"hello\",\"dir\":\".\",\"maxResults\":10}"}
+{"type":"llm.complete","step":0,"durationMs":0,"contentChars":0,"toolCalls":[{"id":"mock-5","name":"search.rg"}]}
+{"type":"tool.call","step":0,"toolCallId":"mock-5","name":"search.rg","internalName":"search.rg","input":{"pattern":"hello","dir":".","maxResults":10}}
+{"type":"tool.result","step":0,"toolCallId":"mock-5","durationMs":0,"name":"search.rg","internalName":"search.rg","resultChars":141,"truncated":false,"rawChars":141,"rawHash":"459b8bec2990f934a66801b99709b91465e470ccb064a9f82f16a7f7594eabf9","rawPreview":"{ \"matches\": [ { \"path\": \"hello.txt\", \"line\": 1, \"col\": 1, \"preview\": \"hello\" } ], \"truncated\": false }"}
+{"type":"llm.complete","step":1,"durationMs":0,"contentChars":168,"toolCalls":[]}
+{"type":"turn.end","ts":1774709566792,"outputChars":168}
+{"type":"run.end","mode":"fixture","name":"replay-strict","ts":1774709566792}

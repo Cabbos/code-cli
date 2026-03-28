@@ -1,6 +1,8 @@
 import { LlmCompleteParams, LlmProvider, LlmResponse } from "./types"
 
 export class MockProvider implements LlmProvider {
+  private nextToolCallId = 1
+
   async complete(params: LlmCompleteParams): Promise<LlmResponse> {
     const lastMsg = params.messages[params.messages.length - 1]
     if (lastMsg?.role === "tool") {
@@ -28,7 +30,8 @@ export class MockProvider implements LlmProvider {
           input = { raw: json }
         }
       }
-      return { content: "", toolCalls: [{ id: "mock-1", name, input }] }
+      const id = `mock-${this.nextToolCallId++}`
+      return { content: "", toolCalls: [{ id, name, input }] }
     }
 
     const out = `mock:${text}`

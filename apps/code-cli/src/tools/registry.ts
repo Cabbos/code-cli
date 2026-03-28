@@ -1,5 +1,6 @@
 import { ToolContext, ToolDefinition } from "./types"
 import { ToolPolicy, isToolAllowed, needsConfirmation } from "./policy"
+import { validateJsonSchema } from "./validate"
 
 export class ToolRegistry {
   private readonly tools = new Map<string, ToolDefinition<any, any>>()
@@ -37,6 +38,10 @@ export class ToolRegistry {
     if (!tool) throw new Error(`Unknown tool: ${name}`)
     const allowed = isToolAllowed(name, this.policy)
     if (!allowed.ok) throw new Error(`Tool blocked by policy: ${allowed.reason}`)
+    if (tool.inputSchema) {
+      const vr = validateJsonSchema(tool.inputSchema, input)
+      if (!vr.ok) throw new Error(`Invalid tool input: ${vr.error}`)
+    }
     if (needsConfirmation(name, this.policy)) {
       if (!ctx.confirm) throw new Error("Tool requires confirmation, but no confirm handler is available")
       const ok = await ctx.confirm({ name, input })

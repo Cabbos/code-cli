@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "Live eval provider (e.g. kimi, openai-compatible)"
+        required: false
+        default: "kimi"
+        type: string
+      model:
+        description: "Live eval model (optional; falls back to provider default)"
+        required: false
+        default: ""
+        type: string
+      baseUrl:
+        description: "OpenAI-compatible baseUrl (optional)"
+        required: false
+        default: ""
+        type: string
+      workspace:
+        description: "Workspace root for live eval (relative to repo root)"
+        required: false
+        default: "."
+        type: string
+
+jobs:
+  ci:
+    name: Build + Lint + Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+  live-eval:
+    name: Live Eval (Manual)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      CODECLI_PROVIDER: ${{ inputs.provider }}
+      CODECLI_MODEL: ${{ inputs.model }}
+      CODECLI_BASE_URL: ${{ inputs.baseUrl }}
+      CODECLI_EVAL_WORKSPACE: ${{ github.workspace }}/${{ inputs.workspace }}
+      CODECLI_API_KEY: ${{ secrets.CODECLI_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install
+        run: npm ci
+
+      - name: Run live eval
+        working-directory: apps/code-cli
+        run: npm run eval:live

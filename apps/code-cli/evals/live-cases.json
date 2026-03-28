@@ -2,9 +2,26 @@
   "cases": [
     {
       "name": "live_search_todo_count",
-      "prompt": "Use search.rg to find all occurrences of \"TODO\" under the workspace and then answer with only the total count as a number.",
-      "expectToolContains": "\"matches\"",
+      "prompt": "Use search.rg to find all occurrences of \"TODO\" under the workspace. You MUST call the tool. Then answer with only the total count as a number.",
+      "requireTools": ["search.rg"],
+      "minToolCalls": 1,
+      "expectToolJson": [
+        { "tool": "search.rg", "path": "matches", "type": "array" },
+        { "tool": "search.rg", "path": "truncated", "type": "boolean" }
+      ],
       "expectOutputRegex": "^[0-9]+$"
+    },
+    {
+      "name": "live_git_status_json_summary",
+      "prompt": "Call git.status for the workspace root. You MUST call the tool. Then output ONLY a JSON object with keys: isRepo (boolean), branch (string or null), entriesCount (number).",
+      "requireTools": ["git.status"],
+      "minToolCalls": 1,
+      "expectToolJson": [
+        { "tool": "git.status", "path": "isRepo", "equals": true },
+        { "tool": "git.status", "path": "entries", "type": "array" },
+        { "tool": "git.status", "path": "raw", "type": "string" }
+      ],
+      "expectOutputRegex": "^\\{[\\s\\S]*\\}$"
     }
   ]
 }

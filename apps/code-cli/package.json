@@ -12,11 +12,15 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
     "dev": "ts-node src/index.ts",
     "start": "node dist/index.js",
-    "test": "node dist/index.js --help",
+    "test": "npm run build && npm run eval && npm run eval:replay:fixtures",
     "eval": "ts-node src/eval/run.ts",
-    "eval:live": "ts-node src/eval/live.ts"
+    "eval:live": "ts-node src/eval/live.ts",
+    "eval:replay": "ts-node src/eval/replay.ts",
+    "eval:trace": "ts-node src/eval/trace.ts",
+    "eval:replay:fixtures": "npm run eval:replay -- --trace evals/fixtures/replay-basic.jsonl --workspace evals/replay-workspace --ignore-output && npm run eval:replay -- --trace evals/fixtures/replay-strict.jsonl --workspace evals/replay-workspace"
   },
   "keywords": [],
   "author": "",

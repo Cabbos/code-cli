@@ -8,6 +8,7 @@
     "build": "npm -w apps/code-cli run build",
     "dev": "npm -w apps/code-cli run dev",
     "start": "npm -w apps/code-cli run start",
+    "lint": "npm -w apps/code-cli run lint",
     "test": "npm -w apps/code-cli run test"
   },
   "keywords": [],
