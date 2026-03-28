@@ -11,10 +11,11 @@ export type ProviderConfig = {
 
 export function createProvider(cfg: ProviderConfig): { provider: LlmProvider; model: string } {
   const kind = (cfg.provider ?? "mock").toLowerCase()
-  const model = cfg.model
+  const model = kind === "kimi" || kind === "moonshot" ? (cfg.model === "gpt-4.1-mini" ? "moonshot-v1-8k" : cfg.model) : cfg.model
 
-  if (kind === "openai" || kind === "openai-compatible") {
-    const baseUrl = cfg.baseUrl ?? "https://api.openai.com"
+  if (kind === "openai" || kind === "openai-compatible" || kind === "kimi" || kind === "moonshot") {
+    const baseUrl =
+      cfg.baseUrl ?? (kind === "kimi" || kind === "moonshot" ? "https://api.moonshot.cn" : "https://api.openai.com")
     const apiKey = cfg.apiKey
     return {
       provider: new OpenAICompatibleProvider(apiKey ? { baseUrl, apiKey } : { baseUrl }),
@@ -27,10 +28,13 @@ export function createProvider(cfg: ProviderConfig): { provider: LlmProvider; mo
 
 export function createProviderFromEnv(): { provider: LlmProvider; model: string } {
   const kind = (process.env.CODECLI_PROVIDER ?? "mock").toLowerCase()
-  const model = process.env.CODECLI_MODEL ?? "gpt-4.1-mini"
+  const model =
+    process.env.CODECLI_MODEL ??
+    (kind === "kimi" || kind === "moonshot" ? "moonshot-v1-8k" : "gpt-4.1-mini")
 
-  if (kind === "openai" || kind === "openai-compatible") {
-    const baseUrl = process.env.CODECLI_BASE_URL ?? "https://api.openai.com"
+  if (kind === "openai" || kind === "openai-compatible" || kind === "kimi" || kind === "moonshot") {
+    const baseUrl =
+      process.env.CODECLI_BASE_URL ?? (kind === "kimi" || kind === "moonshot" ? "https://api.moonshot.cn" : "https://api.openai.com")
     const apiKey = process.env.CODECLI_API_KEY
     return {
       provider: new OpenAICompatibleProvider(apiKey ? { baseUrl, apiKey } : { baseUrl }),

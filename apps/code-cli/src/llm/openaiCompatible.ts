@@ -17,7 +17,7 @@ export class OpenAICompatibleProvider implements LlmProvider {
   private readonly apiKey: string | undefined
 
   constructor(opts: OpenAICompatibleOptions) {
-    this.baseUrl = opts.baseUrl.replace(/\/+$/, "")
+    this.baseUrl = opts.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")
     this.apiKey = opts.apiKey
   }
 
@@ -128,4 +128,3 @@ function safeJsonParse(s: string): unknown {
     return { _raw: s }
   }
 }
-

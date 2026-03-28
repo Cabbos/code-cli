@@ -66,6 +66,25 @@ You can run the CLI directly via the local bin shim:
 - `--readonly`: Disable tools that write to the filesystem (e.g., `fs.writeFile`, `fs.applyPatch`).
 - `--confirm-writes`: Ask for human confirmation before writing files.
 
+## Real LLM Setup (OpenAI-compatible)
+
+The CLI supports OpenAI-compatible `/v1/chat/completions` providers.
+
+### Kimi (Moonshot)
+
+```bash
+export CODECLI_PROVIDER=kimi
+export CODECLI_API_KEY=sk-...
+export CODECLI_MODEL=moonshot-v1-8k
+export CODECLI_BASE_URL=https://api.moonshot.cn
+
+./node_modules/.bin/ccode run "hello"
+```
+
+Notes:
+- `CODECLI_BASE_URL` can be set to either `https://api.moonshot.cn` or `https://api.moonshot.cn/v1`.
+- Avoid committing API keys. Prefer env vars or a local config file outside the repo.
+
 ## Testing
 
 Run the offline evaluation suite:
