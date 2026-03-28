@@ -42,6 +42,7 @@ export type RunAgentTurnParams = {
   stream?: boolean
   maxSteps?: number
   confirm?: ToolConfirmFn
+  sanitizeToolNames?: boolean
 }
 
 export type RunAgentTurnResult = {
@@ -55,11 +56,8 @@ export function createInitialMessages(systemPrompt: string): LlmMessage[] {
 
 export async function runAgentTurn(params: RunAgentTurnParams): Promise<RunAgentTurnResult> {
   const maxSteps = params.maxSteps ?? 8
-  const tools: LlmTool[] = params.tools.all().map((t) => ({
-    name: t.name,
-    description: t.description,
-    inputSchema: t.inputSchema
-  }))
+  const toolNameMap = createToolNameMap(params.tools.all(), Boolean(params.sanitizeToolNames))
+  const tools: LlmTool[] = toolNameMap.tools
 
   if (params.systemPrompt) {
     if (params.messages.length && params.messages[0]?.role === "system") {
@@ -96,7 +94,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<RunAgent
     if (!res.toolCalls.length) return { content: res.content, messages: params.messages }
 
     for (const tc of res.toolCalls) {
-      const toolMsg = await executeToolCall(tc, params.tools, params.workspace, params.confirm)
+      const toolMsg = await executeToolCall(tc, params.tools, params.workspace, params.confirm, toolNameMap.llmToInternal)
       params.messages.push(toolMsg)
     }
   }
@@ -108,11 +106,13 @@ async function executeToolCall(
   tc: LlmToolCall,
   tools: ToolRegistry,
   workspace: Workspace,
-  confirm?: ToolConfirmFn
+  confirm?: ToolConfirmFn,
+  llmToInternal?: Record<string, string>
 ): Promise<LlmMessage> {
   try {
+    const internalName = llmToInternal?.[tc.name] ?? tc.name
     const ctx = { workspace, ...(confirm ? { confirm } : {}) }
-    const result = await tools.call(tc.name, tc.input, ctx)
+    const result = await tools.call(internalName, tc.input, ctx)
     return { role: "tool", toolCallId: tc.id, name: tc.name, content: stableJson(result) }
   } catch (err) {
     return {
@@ -126,4 +126,44 @@ async function executeToolCall(
 
 function stableJson(v: unknown): string {
   return JSON.stringify(v, null, 2)
+}
+
+function createToolNameMap(
+  tools: Array<{ name: string; description: string; inputSchema?: unknown }>,
+  sanitize: boolean
+): { tools: LlmTool[]; llmToInternal: Record<string, string> } {
+  if (!sanitize) {
+    const llmTools: LlmTool[] = tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }))
+    const llmToInternal: Record<string, string> = Object.fromEntries(tools.map((t) => [t.name, t.name]))
+    return { tools: llmTools, llmToInternal }
+  }
+
+  const llmToInternal: Record<string, string> = {}
+  const used = new Set<string>()
+  const llmTools: LlmTool[] = tools.map((t) => {
+    const llmName = uniqueLlmToolName(sanitizeToolName(t.name), used)
+    llmToInternal[llmName] = t.name
+    return { name: llmName, description: t.description, inputSchema: t.inputSchema }
+  })
+
+  return { tools: llmTools, llmToInternal }
+}
+
+function sanitizeToolName(name: string): string {
+  let out = name.replace(/[^a-zA-Z0-9_-]/g, "_")
+  if (!/^[a-zA-Z]/.test(out)) out = `t_${out}`
+  out = out.replace(/_+/g, "_")
+  return out
+}
+
+function uniqueLlmToolName(name: string, used: Set<string>): string {
+  if (!used.has(name)) {
+    used.add(name)
+    return name
+  }
+  let i = 2
+  while (used.has(`${name}_${i}`)) i++
+  const out = `${name}_${i}`
+  used.add(out)
+  return out
 }

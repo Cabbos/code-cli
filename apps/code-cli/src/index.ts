@@ -100,7 +100,8 @@ program
       ...(typeof config.agent.systemPrompt === "string" ? { systemPrompt: config.agent.systemPrompt } : {}),
       ...(typeof opts.stream === "boolean" ? { stream: opts.stream } : {}),
       ...(typeof opts.maxSteps === "number" ? { maxSteps: opts.maxSteps } : {}),
-      ...(confirm ? { confirm } : {})
+      ...(confirm ? { confirm } : {}),
+      ...(shouldSanitizeToolNames(config.llm.provider) ? { sanitizeToolNames: true } : {})
     })
     if (!opts.stream) process.stdout.write(`${out.content}\n`)
   })
@@ -140,7 +141,8 @@ program
         ...(typeof systemPrompt === "string" ? { systemPrompt } : {}),
         ...(typeof opts.stream === "boolean" ? { stream: opts.stream } : {}),
         ...(typeof opts.maxSteps === "number" ? { maxSteps: opts.maxSteps } : {}),
-        ...(confirm ? { confirm } : {})
+        ...(confirm ? { confirm } : {}),
+        ...(shouldSanitizeToolNames(config.llm.provider) ? { sanitizeToolNames: true } : {})
       })
       await store.save(session)
       if (!opts.stream) process.stdout.write(`${out.content}\n`)
@@ -217,6 +219,11 @@ function toToolPolicy(config: CodeCliConfig): ToolPolicy {
   if (Array.isArray(config.tools.deny)) p.deny = config.tools.deny
   if (typeof config.tools.confirmWrites === "boolean") p.confirmWrites = config.tools.confirmWrites
   return p
+}
+
+function shouldSanitizeToolNames(provider: string): boolean {
+  const p = provider.toLowerCase()
+  return p === "openai" || p === "openai-compatible" || p === "kimi" || p === "moonshot"
 }
 
 async function createConfirmFn(opts: { enabled: boolean }) {
