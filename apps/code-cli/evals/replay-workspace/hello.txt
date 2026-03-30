@@ -1,2 +1,2 @@
-hello
-TODO: sample
+const greeting = "hello"
+const count = 42

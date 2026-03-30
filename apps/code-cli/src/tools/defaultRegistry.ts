@@ -13,6 +13,13 @@ import {
 } from "./builtins/fs"
 import { gitDiffTool, gitStatusTool } from "./builtins/git"
 import { searchRgTool } from "./builtins/search"
+import {
+  addTypeAnnotationTool,
+  extractFunctionTool,
+  listSymbolsTool,
+  renameSymbolTool,
+  wrapWithTryCatchTool
+} from "./builtins/ast"
 import { ToolPolicy } from "./policy"
 
 export function createDefaultToolRegistry(opts?: { policy?: ToolPolicy }): ToolRegistry {
@@ -30,5 +37,10 @@ export function createDefaultToolRegistry(opts?: { policy?: ToolPolicy }): ToolR
   reg.register(searchRgTool)
   reg.register(gitDiffTool)
   reg.register(gitStatusTool)
+  reg.register(listSymbolsTool)
+  reg.register(renameSymbolTool)
+  reg.register(wrapWithTryCatchTool)
+  reg.register(addTypeAnnotationTool)
+  reg.register(extractFunctionTool)
   return reg
 }

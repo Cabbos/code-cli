@@ -11,17 +11,20 @@ type CaseFile = {
 }
 
 async function main() {
-  const root = process.cwd()
-  const filePath = path.join(root, "evals", "cases.json")
+  const monorepoRoot = path.resolve(__dirname, "../..")
+  const filePath = path.join(monorepoRoot, "evals", "cases.json")
+
+  const { execSync } = require("child_process")
   const raw = await fs.readFile(filePath, "utf8")
   const data = JSON.parse(raw) as CaseFile
 
   const provider = new MockProvider()
   const tools = createDefaultToolRegistry()
-  const workspace = new Workspace({ rootDir: path.resolve(root, "../..") })
+  const workspace = new Workspace({ rootDir: monorepoRoot })
 
   let failed = 0
   for (const c of data.cases) {
+    execSync("node scripts/eval-restore.js", { cwd: monorepoRoot })
     const out = await runAgent({
       provider,
       model: "mock",
@@ -47,4 +50,3 @@ main().catch((err) => {
   process.stderr.write(`${err instanceof Error ? err.stack ?? err.message : String(err)}\n`)
   process.exit(1)
 })
-

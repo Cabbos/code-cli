@@ -1,14 +1,14 @@
-{"type":"run.start","mode":"fixture","name":"replay-strict","ts":1774886198690,"workspace":"/Users/cabbos/project/projects/code-monorepo/apps/code-cli/evals/replay-workspace"}
-{"type":"turn.start","ts":1774886198690,"inputPreview":"tool:fs.readFile {\"path\":\"hello.txt\"}"}
+{"type":"run.start","mode":"fixture","name":"replay-strict","ts":1774887948505,"workspace":"/Users/cabbos/project/projects/code-monorepo/apps/code-cli/evals/replay-workspace"}
+{"type":"turn.start","ts":1774887948505,"inputPreview":"tool:fs.readFile {\"path\":\"hello.txt\"}"}
 {"type":"llm.complete","step":0,"durationMs":0,"contentChars":0,"toolCalls":[{"id":"mock-4","name":"fs.readFile"}]}
 {"type":"tool.call","step":0,"toolCallId":"mock-4","name":"fs.readFile","internalName":"fs.readFile","input":{"path":"hello.txt"}}
-{"type":"tool.result","step":0,"toolCallId":"mock-4","durationMs":0,"name":"fs.readFile","internalName":"fs.readFile","resultChars":40,"truncated":false,"rawChars":40,"rawHash":"720fd429ff16fc2474ad45d25205abf7ec7d98247c8ee4d5976135759e454631","rawPreview":"{ \"content\": \"hello\\nTODO: sample\\n\" }"}
-{"type":"llm.complete","step":1,"durationMs":0,"contentChars":69,"toolCalls":[]}
-{"type":"turn.end","ts":1774886198690,"outputChars":69}
-{"type":"turn.start","ts":1774886198690,"inputPreview":"tool:search.rg {\"pattern\":\"hello\",\"dir\":\".\",\"maxResults\":10}"}
+{"type":"tool.result","step":0,"toolCallId":"mock-4","durationMs":0,"name":"fs.readFile","internalName":"fs.readFile","resultChars":65,"truncated":false,"rawChars":65,"rawHash":"b5cfd203794069a628f2f220ce2419eb88f0a04aa2900250f4b490ba5a5ffd43","rawPreview":"{ \"content\": \"const greeting = \\\"hello\\\"\\nconst count = 42\\n\" }"}
+{"type":"llm.complete","step":1,"durationMs":0,"contentChars":94,"toolCalls":[]}
+{"type":"turn.end","ts":1774887948505,"outputChars":94}
+{"type":"turn.start","ts":1774887948505,"inputPreview":"tool:search.rg {\"pattern\":\"hello\",\"dir\":\".\",\"maxResults\":10}"}
 {"type":"llm.complete","step":0,"durationMs":0,"contentChars":0,"toolCalls":[{"id":"mock-5","name":"search.rg"}]}
 {"type":"tool.call","step":0,"toolCallId":"mock-5","name":"search.rg","internalName":"search.rg","input":{"pattern":"hello","dir":".","maxResults":10}}
-{"type":"tool.result","step":0,"toolCallId":"mock-5","durationMs":0,"name":"search.rg","internalName":"search.rg","resultChars":141,"truncated":false,"rawChars":141,"rawHash":"459b8bec2990f934a66801b99709b91465e470ccb064a9f82f16a7f7594eabf9","rawPreview":"{ \"matches\": [ { \"path\": \"hello.txt\", \"line\": 1, \"col\": 1, \"preview\": \"hello\" } ], \"truncated\": false }"}
-{"type":"llm.complete","step":1,"durationMs":0,"contentChars":168,"toolCalls":[]}
-{"type":"turn.end","ts":1774886198690,"outputChars":168}
-{"type":"run.end","mode":"fixture","name":"replay-strict","ts":1774886198690}
+{"type":"tool.result","step":0,"toolCallId":"mock-5","durationMs":1,"name":"search.rg","internalName":"search.rg","resultChars":265,"truncated":false,"rawChars":265,"rawHash":"3db887c08be297a4ea4930ba1e7a83320fb445210c8c6db1e8ad7d4f7f33e9dc","rawPreview":"{ \"matches\": [ { \"path\": \"__test1__.txt\", \"line\": 1, \"col\": 1, \"preview\": \"hello\" }, { \"path\": \"hello.txt\", \"line\": 1, \"col\": 19, \"preview\": \"const greeting = \\\"hello\\\"\" } ], \"truncated\": false }"}
+{"type":"llm.complete","step":1,"durationMs":0,"contentChars":292,"toolCalls":[]}
+{"type":"turn.end","ts":1774887948506,"outputChars":292}
+{"type":"run.end","mode":"fixture","name":"replay-strict","ts":1774887948506}

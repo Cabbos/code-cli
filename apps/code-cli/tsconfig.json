@@ -1,4 +1,5 @@
 {
+  "exclude": ["evals/**", "node_modules", "dist/**", "scripts/**"],
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist",

@@ -7,17 +7,17 @@
     },
     {
       "name": "tool_list_files",
-      "prompt": "tool:fs.listFiles {\"dir\":\"apps\",\"recursive\":false}",
+      "prompt": "tool:fs.listFiles {\"dir\":\"src\",\"recursive\":false}",
       "expectContains": "mock:tool_result:fs.listFiles"
     },
     {
       "name": "tool_search_rg",
-      "prompt": "tool:search.rg {\"pattern\":\"runAgentTurn\",\"dir\":\"apps/code-cli/src\",\"maxResults\":5}",
+      "prompt": "tool:search.rg {\"pattern\":\"runAgentTurn\",\"dir\":\"src/agent\",\"maxResults\":5}",
       "expectContains": "runAgentTurn"
     },
     {
       "name": "tool_apply_patch_missing",
-      "prompt": "tool:fs.applyPatch {\"path\":\"__missing__.txt\",\"patch\":\"@@ -1 +1 @@\\n-a\\n+b\\n\"}",
+      "prompt": "tool:fs.applyPatch {\"path\":\"evals/replay-workspace/__missing__.txt\",\"patch\":\"@@ -1 +1 @@\\n-a\\n+b\\n\"}",
       "expectContains": "File not found"
     },
     {
@@ -42,33 +42,63 @@
     },
     {
       "name": "tool_batchRead_multiple",
-      "prompt": "tool:fs.batchRead {\"paths\":[\"apps/code-cli/package.json\",\"package.json\"]}",
+      "prompt": "tool:fs.batchRead {\"paths\":[\"package.json\",\"README.md\"]}",
       "expectContains": "code-cli"
     },
     {
       "name": "tool_batchRead_missing",
-      "prompt": "tool:fs.batchRead {\"paths\":[\"__nonexistent__.txt\"]}",
+      "prompt": "tool:fs.batchRead {\"paths\":[\"evals/replay-workspace/__nonexistent__.txt\"]}",
       "expectContains": "error"
     },
     {
       "name": "tool_batchWrite_atomic_success",
-      "prompt": "tool:fs.batchWrite {\"entries\":[{\"path\":\"__test1__.txt\",\"content\":\"hello\"},{\"path\":\"__test2__.txt\",\"content\":\"world\"}]}",
+      "prompt": "tool:fs.batchWrite {\"entries\":[{\"path\":\"evals/replay-workspace/__test1__.txt\",\"content\":\"hello\"},{\"path\":\"evals/replay-workspace/__test2__.txt\",\"content\":\"world\"}]}",
       "expectContains": "\"written\""
     },
     {
       "name": "tool_rename_single",
-      "prompt": "tool:fs.rename {\"from\":\"apps/code-cli/evals/replay-workspace/hello.txt\",\"to\":\"apps/code-cli/evals/replay-workspace/hello_renamed.txt\"}",
+      "prompt": "tool:fs.rename {\"from\":\"evals/replay-workspace/hello.txt\",\"to\":\"evals/replay-workspace/hello_renamed.txt\"}",
       "expectContains": "\"renamed\""
     },
     {
       "name": "tool_delete_file",
-      "prompt": "tool:fs.delete {\"path\":\"apps/code-cli/evals/replay-workspace/hello_renamed.txt\"}",
+      "prompt": "tool:fs.delete {\"path\":\"evals/replay-workspace/hello_renamed.txt\"}",
       "expectContains": "\"deleted\""
     },
     {
       "name": "tool_copy_file",
-      "prompt": "tool:fs.copy {\"from\":\"apps/code-cli/evals/replay-workspace/nested/note.md\",\"to\":\"apps/code-cli/evals/replay-workspace/note_copy.md\"}",
+      "prompt": "tool:fs.copy {\"from\":\"evals/replay-workspace/nested/note.md\",\"to\":\"evals/replay-workspace/note_copy.md\"}",
       "expectContains": "\"copied\""
+    },
+    {
+      "name": "tool_ast_listSymbols",
+      "prompt": "tool:ast.listSymbols {\"path\":\"src/tools/defaultRegistry.ts\"}",
+      "expectContains": "FunctionDeclaration"
+    },
+    {
+      "name": "tool_ast_renameSymbol",
+      "prompt": "tool:ast.renameSymbol {\"path\":\"evals/replay-workspace/hello.txt\",\"oldName\":\"hello\",\"newName\":\"greeting\"}",
+      "expectContains": "greeting"
+    },
+    {
+      "name": "tool_ast_renameSymbol_invalid_identifier",
+      "prompt": "tool:ast.renameSymbol {\"path\":\"evals/replay-workspace/hello.txt\",\"oldName\":\"hello\",\"newName\":\"123bad\"}",
+      "expectContains": "Invalid identifier"
+    },
+    {
+      "name": "tool_ast_wrapWithTryCatch",
+      "prompt": "tool:ast.wrapWithTryCatch {\"path\":\"evals/replay-workspace/hello.txt\",\"insertLine\":0}",
+      "expectContains": "catch"
+    },
+    {
+      "name": "tool_ast_addTypeAnnotation",
+      "prompt": "tool:ast.addTypeAnnotation {\"path\":\"evals/replay-workspace/hello.txt\",\"variableName\":\"greeting\",\"typeAnnotation\":\"string\"}",
+      "expectContains": "string"
+    },
+    {
+      "name": "tool_ast_extractFunction",
+      "prompt": "tool:ast.extractFunction {\"path\":\"src/tools/defaultRegistry.ts\",\"functionName\":\"createDefaultToolRegistry\",\"newFilePath\":\"evals/replay-workspace/extracted_fn.ts\"}",
+      "expectContains": "newFile"
     }
   ]
 }
