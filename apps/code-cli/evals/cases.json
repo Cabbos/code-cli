@@ -39,6 +39,36 @@
       "name": "tool_invalid_input_extra_field",
       "prompt": "tool:git.status {\"maxBytes\":5000,\"nope\":true}",
       "expectContains": "is not allowed"
+    },
+    {
+      "name": "tool_batchRead_multiple",
+      "prompt": "tool:fs.batchRead {\"paths\":[\"apps/code-cli/package.json\",\"package.json\"]}",
+      "expectContains": "code-cli"
+    },
+    {
+      "name": "tool_batchRead_missing",
+      "prompt": "tool:fs.batchRead {\"paths\":[\"__nonexistent__.txt\"]}",
+      "expectContains": "error"
+    },
+    {
+      "name": "tool_batchWrite_atomic_success",
+      "prompt": "tool:fs.batchWrite {\"entries\":[{\"path\":\"__test1__.txt\",\"content\":\"hello\"},{\"path\":\"__test2__.txt\",\"content\":\"world\"}]}",
+      "expectContains": "\"written\""
+    },
+    {
+      "name": "tool_rename_single",
+      "prompt": "tool:fs.rename {\"from\":\"apps/code-cli/evals/replay-workspace/hello.txt\",\"to\":\"apps/code-cli/evals/replay-workspace/hello_renamed.txt\"}",
+      "expectContains": "\"renamed\""
+    },
+    {
+      "name": "tool_delete_file",
+      "prompt": "tool:fs.delete {\"path\":\"apps/code-cli/evals/replay-workspace/hello_renamed.txt\"}",
+      "expectContains": "\"deleted\""
+    },
+    {
+      "name": "tool_copy_file",
+      "prompt": "tool:fs.copy {\"from\":\"apps/code-cli/evals/replay-workspace/nested/note.md\",\"to\":\"apps/code-cli/evals/replay-workspace/note_copy.md\"}",
+      "expectContains": "\"copied\""
     }
   ]
 }

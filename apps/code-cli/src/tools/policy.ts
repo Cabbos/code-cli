@@ -5,6 +5,16 @@ export type ToolPolicy = {
   confirmWrites?: boolean
 }
 
+const WRITE_TOOLS = new Set([
+  "fs.writeFile",
+  "fs.applyPatch",
+  "fs.batchWrite",
+  "fs.rename",
+  "fs.delete",
+  "fs.copy",
+  "fs.symlink"
+])
+
 export function isToolAllowed(name: string, policy: ToolPolicy | undefined): { ok: true } | { ok: false; reason: string } {
   if (!policy) return { ok: true }
 
@@ -16,7 +26,7 @@ export function isToolAllowed(name: string, policy: ToolPolicy | undefined): { o
     return { ok: false, reason: "Tool is denylisted" }
   }
 
-  if (policy.readonly && (name === "fs.writeFile" || name === "fs.applyPatch")) {
+  if (policy.readonly && WRITE_TOOLS.has(name)) {
     return { ok: false, reason: "Tool disabled in readonly mode" }
   }
 
@@ -25,6 +35,6 @@ export function isToolAllowed(name: string, policy: ToolPolicy | undefined): { o
 
 export function needsConfirmation(name: string, policy: ToolPolicy | undefined): boolean {
   if (!policy) return false
-  if (policy.confirmWrites && (name === "fs.writeFile" || name === "fs.applyPatch")) return true
+  if (policy.confirmWrites && WRITE_TOOLS.has(name)) return true
   return false
 }

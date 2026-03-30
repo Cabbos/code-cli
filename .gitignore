@@ -1,6 +1,7 @@
 node_modules
 dist
 .npm-cache
+.trae
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

@@ -59,4 +59,32 @@ export class Workspace {
     await walk(startAbs, 0)
     return out.sort()
   }
+
+  async rename(fromRel: string, toRel: string): Promise<void> {
+    const fromAbs = this.resolvePath(fromRel)
+    const toAbs = this.resolvePath(toRel)
+    await fs.mkdir(path.dirname(toAbs), { recursive: true })
+    await fs.rename(fromAbs, toAbs)
+  }
+
+  async deleteFile(relPath: string, recursive = false): Promise<void> {
+    const abs = this.resolvePath(relPath)
+    const stat = await fs.stat(abs)
+    if (stat.isDirectory()) {
+      if (recursive) {
+        await fs.rm(abs, { recursive: true })
+      } else {
+        await fs.rmdir(abs)
+      }
+    } else {
+      await fs.unlink(abs)
+    }
+  }
+
+  async copyFile(fromRel: string, toRel: string): Promise<void> {
+    const fromAbs = this.resolvePath(fromRel)
+    const toAbs = this.resolvePath(toRel)
+    await fs.mkdir(path.dirname(toAbs), { recursive: true })
+    await fs.copyFile(fromAbs, toAbs)
+  }
 }
