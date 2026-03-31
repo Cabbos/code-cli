@@ -15,7 +15,9 @@
     "lint": "tsc -p tsconfig.json --noEmit",
     "dev": "ts-node src/index.ts",
     "start": "node dist/index.js",
-    "test": "npm run build && npm run eval:restore && npm run eval && npm run eval:replay:fixtures",
+    "test": "npm run test:unit && npm run build && npm run eval:restore && npm run eval && npm run eval:replay:fixtures",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
     "eval": "ts-node src/eval/run.ts",
     "eval:live": "ts-node src/eval/live.ts",
     "eval:replay": "ts-node src/eval/replay.ts",
@@ -33,7 +35,9 @@
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "@vitest/ui": "^4.1.2",
     "ts-node": "^10.9.2",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
   }
 }
