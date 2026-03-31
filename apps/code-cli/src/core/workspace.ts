@@ -22,7 +22,29 @@ export class Workspace {
     const rel = path.relative(this.rootDir, resolved)
     const isInside = !rel.startsWith("..") && !path.isAbsolute(rel)
     if (!isInside) throw new Error("Path escapes workspace root")
+    this.checkSymlinkSafety(resolved)
     return resolved
+  }
+
+  private checkSymlinkSafety(absPath: string): void {
+    const parts = absPath.slice(this.rootDir.length).split(path.sep).filter(Boolean)
+    let current = this.rootDir
+    for (const part of parts) {
+      current = path.join(current, part)
+      try {
+        const stat = require("node:fs").lstatSync(current)
+        if (stat.isSymbolicLink()) {
+          const realPath = require("node:fs").realpathSync(current)
+          const realRel = path.relative(this.rootDir, realPath)
+          if (realRel.startsWith("..") || path.isAbsolute(realRel)) {
+            throw new Error("Path contains symlink pointing outside workspace")
+          }
+        }
+      } catch (err: any) {
+        if (err.code === "ENOENT") return
+        if (err.message.includes("symlink")) throw err
+      }
+    }
   }
 
   async readText(relPath: string): Promise<string> {

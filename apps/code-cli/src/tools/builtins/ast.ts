@@ -36,7 +36,7 @@ export const renameSymbolTool: ToolDefinition<
   { path: string; newContent: string; changedRefs: string[] } | { error: string }
 > = {
   name: "ast.renameSymbol",
-  description: "Rename a symbol (variable, function, class) in a TypeScript/JavaScript file. Optionally provide otherFilePaths to rename across multiple files.",
+  description: "Simple text-based rename in a file. Does word-boundary text replacement (not scope-aware AST rename). Use fs.writeFile to save changes. For multi-file rename, use this tool for each file separately.",
   inputSchema: {
     type: "object",
     additionalProperties: false,

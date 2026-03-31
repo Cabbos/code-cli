@@ -97,7 +97,7 @@ export const batchReadTool: ToolDefinition<
   { entries: BatchReadEntry[]; totalBytes: number; truncated: boolean }
 > = {
   name: "fs.batchRead",
-  description: "Read multiple UTF-8 text files at once, with an optional total byte limit",
+  description: "Read multiple UTF-8 text files at once (parallel reads), with an optional total byte limit",
   inputSchema: {
     type: "object",
     additionalProperties: false,
@@ -110,27 +110,35 @@ export const batchReadTool: ToolDefinition<
   async invoke(input, ctx) {
     const paths = Array.isArray(input.paths) ? input.paths : []
     const maxTotal = typeof input.maxTotalBytes === "number" ? input.maxTotalBytes : 200_000
+
+    const results = await Promise.all(
+      paths.map(async (p): Promise<BatchReadEntry> => {
+        try {
+          const content = await ctx.workspace.readText(p)
+          return { path: p, content }
+        } catch (err) {
+          return { path: p, error: err instanceof Error ? err.message : String(err) }
+        }
+      })
+    )
+
     const entries: BatchReadEntry[] = []
     let totalBytes = 0
+    let truncated = false
 
-    for (const p of paths) {
-      if (totalBytes >= maxTotal) break
-      try {
-        const content = await ctx.workspace.readText(p)
-        if (totalBytes + content.length > maxTotal) {
-          const e: BatchReadEntry = { path: p, error: "skipped: maxTotalBytes exceeded" }
-          entries.push(e)
+    for (const entry of results) {
+      if (entry.content) {
+        if (totalBytes + entry.content.length > maxTotal) {
+          entries.push({ path: entry.path, error: "skipped: maxTotalBytes exceeded" })
+          truncated = true
           continue
         }
-        totalBytes += content.length
-        entries.push({ path: p, content })
-      } catch (err) {
-        const e: BatchReadEntry = { path: p, error: err instanceof Error ? err.message : String(err) }
-        entries.push(e)
+        totalBytes += entry.content.length
       }
+      entries.push(entry)
     }
 
-    return { entries, totalBytes, truncated: totalBytes >= maxTotal }
+    return { entries, totalBytes, truncated: truncated || totalBytes >= maxTotal }
   }
 }
 
@@ -352,18 +360,18 @@ function applyUnifiedDiff(original: string, patch: string): string {
 
     for (const hl of h.lines) {
       const tag = hl[0]
-      const text = hl.slice(1)
       if (tag === " ") {
         const cur = origLines[cursor] ?? ""
-        if (cur !== text) throw new Error("Patch context mismatch")
+        const contextLine = hl.slice(1)
+        if (cur !== contextLine) throw new Error(`Patch context mismatch at line ${cursor + 1}: expected "${contextLine}", got "${cur}"`)
         out.push(cur)
         cursor++
       } else if (tag === "-") {
         const cur = origLines[cursor] ?? ""
-        if (cur !== text) throw new Error("Patch removal mismatch")
+        if (cur !== hl) throw new Error(`Patch removal mismatch at line ${cursor + 1}: expected "${hl.slice(1)}", got "${cur}"`)
         cursor++
       } else if (tag === "+") {
-        out.push(text)
+        out.push(hl.slice(1))
       }
     }
   }

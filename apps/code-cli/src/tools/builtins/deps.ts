@@ -8,6 +8,18 @@ type DepEntry = {
   type: "prod" | "dev" | "peer" | "optional"
 }
 
+interface NpmLsNode {
+  name?: string
+  version?: string
+  path?: string
+  dependencies?: Record<string, NpmLsNode>
+  dev?: boolean
+  peer?: boolean
+  optional?: boolean
+  missing?: boolean
+  peerMissing?: boolean
+}
+
 export const listDepsTool: ToolDefinition<
   { packageJsonPath?: string; includeDev?: boolean; includePeer?: boolean; includeOptional?: boolean },
   { dependencies: DepEntry[]; root: string }
@@ -26,7 +38,7 @@ export const listDepsTool: ToolDefinition<
   },
   async invoke(input, ctx) {
     const pkgPath = input.packageJsonPath ?? "package.json"
-    const absPath = ctx.workspace.resolvePath(pkgPath)
+    ctx.workspace.resolvePath(pkgPath)
     const content = await ctx.workspace.readText(pkgPath)
     const pkg = JSON.parse(content)
 
@@ -53,7 +65,7 @@ export const listDepsTool: ToolDefinition<
       }
     }
 
-    return { dependencies: deps, root: absPath }
+    return { dependencies: deps, root: ctx.workspace.root }
   }
 }
 
@@ -79,7 +91,7 @@ export const outdatedTool: ToolDefinition<
         encoding: "utf-8",
         timeout: 30_000
       })
-      const tree = JSON.parse(result)
+      const tree = JSON.parse(result) as NpmLsNode
       const outdated = flattenOutdated(tree)
       return { outdated }
     } catch (err) {
@@ -98,16 +110,15 @@ type OutdatedEntry = {
   type: string
 }
 
-function flattenOutdated(node: any, result: OutdatedEntry[] = [], type = "prod"): OutdatedEntry[] {
+function flattenOutdated(node: NpmLsNode | undefined, result: OutdatedEntry[] = [], type = "prod"): OutdatedEntry[] {
   if (!node || typeof node !== "object") return result
 
   if (node.peerMissing) {
-    for (const [name, info] of Object.entries(node.peerMissing as Record<string, any>)) {
-      const p = info as any
+    for (const [name, info] of Object.entries(node.peerMissing)) {
       result.push({
         name,
-        current: p.required || "missing",
-        wanted: p.required || "?",
+        current: (info as { required?: string }).required || "missing",
+        wanted: (info as { required?: string }).required || "?",
         latest: "?",
         location: node.path || "",
         type: "peer"
@@ -116,8 +127,8 @@ function flattenOutdated(node: any, result: OutdatedEntry[] = [], type = "prod")
   }
 
   if (node.dependencies) {
-    for (const [name, dep] of Object.entries(node.dependencies as Record<string, any>)) {
-      const d = dep as any
+    for (const [name, dep] of Object.entries(node.dependencies)) {
+      const d = dep as NpmLsNode
       const depType = d.dev ? "dev" : d.peer ? "peer" : d.optional ? "optional" : "prod"
       if (d.missing || d.peerMissing) {
         result.push({
@@ -162,16 +173,16 @@ export const graphTool: ToolDefinition<
         encoding: "utf-8",
         timeout: 30_000
       })
-      const tree = JSON.parse(result)
+      const tree = JSON.parse(result) as NpmLsNode
       const nodes = new Set<string>()
       const edges: [string, string][] = []
 
-      function traverse(node: any, depth = 0) {
+      function traverse(node: NpmLsNode | undefined, depth = 0) {
         if (!node || typeof node !== "object" || depth > maxDepth) return
         if (node.name) nodes.add(node.name)
         if (node.dependencies) {
-          for (const [name, dep] of Object.entries(node.dependencies as Record<string, any>)) {
-            const d = dep as any
+          for (const [name, dep] of Object.entries(node.dependencies)) {
+            const d = dep as NpmLsNode
             nodes.add(name)
             edges.push([node.name || "root", name])
             traverse(d, depth + 1)
@@ -219,26 +230,27 @@ export const conflictsTool: ToolDefinition<
   },
   async invoke(input, ctx) {
     const cwd = ctx.workspace.root
+    const maxDepth = 100
 
     try {
-      const result = execSync("npm ls --all --depth=999 --json 2>/dev/null || echo '{}'", {
+      const result = execSync(`npm ls --all --depth=${maxDepth} --json 2>/dev/null || echo '{}'`, {
         cwd,
         encoding: "utf-8",
         timeout: 30_000
       })
-      const tree = JSON.parse(result)
+      const tree = JSON.parse(result) as NpmLsNode
       const pkgVersions = new Map<string, Map<string, string>>()
 
-      function collect(node: any, path: string[] = []) {
-        if (!node || typeof node !== "object") return
+      function collect(node: NpmLsNode | undefined, path: string[] = [], depth = 0) {
+        if (!node || typeof node !== "object" || depth > maxDepth) return
         if (node.name && node.version) {
           const pkg = node.name
           if (!pkgVersions.has(pkg)) pkgVersions.set(pkg, new Map())
           pkgVersions.get(pkg)!.set(node.version, path.join(" > "))
         }
-        if (node.dependencies) {
-          for (const [name, dep] of Object.entries(node.dependencies as Record<string, any>)) {
-            collect(dep, [...path, name])
+        if (node.dependencies && depth < maxDepth) {
+          for (const [, dep] of Object.entries(node.dependencies)) {
+            collect(dep as NpmLsNode, [...path, node.name || "root"], depth + 1)
           }
         }
       }
@@ -298,19 +310,20 @@ export const whyTool: ToolDefinition<
         encoding: "utf-8",
         timeout: 30_000
       })
-      const tree = JSON.parse(result)
+      const tree = JSON.parse(result) as NpmLsNode
       const foundIn: string[] = []
 
-      function search(node: any, path: string[] = []) {
+      function search(node: NpmLsNode | undefined, path: string[] = []) {
         if (!node || typeof node !== "object") return
         if (node.name) {
           if (node.dependencies?.[pkgName]) {
-            foundIn.push(path.join(" > ") + " > " + node.name + ` (depends on ${pkgName})`)
+            const prefix = path.length > 0 ? path.join(" > ") + " > " : ""
+            foundIn.push(prefix + node.name + ` (depends on ${pkgName})`)
           }
         }
         if (node.dependencies) {
-          for (const [name, dep] of Object.entries(node.dependencies as Record<string, any>)) {
-            search(dep, [...path, node.name || "root"])
+          for (const [, dep] of Object.entries(node.dependencies)) {
+            search(dep as NpmLsNode, [...path, node.name || "root"])
           }
         }
       }

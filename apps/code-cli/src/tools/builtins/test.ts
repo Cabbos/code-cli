@@ -1,6 +1,53 @@
 import { execSync } from "node:child_process"
 import { ToolDefinition } from "../types"
 
+const SAFE_TEST_COMMANDS = new Set([
+  "npm test",
+  "npm run test",
+  "npx jest",
+  "npx vitest",
+  "npx mocha",
+  "npx ava",
+  "npx tape",
+  "npx tap",
+  "jest",
+  "vitest",
+  "mocha",
+  "ava",
+  "tape",
+  "tap",
+  "pnpm test",
+  "pnpm run test",
+  "yarn test",
+  "yarn run test",
+  "bun test",
+  "bun run test",
+  "pytest",
+  "python -m pytest",
+  "python3 -m pytest",
+  "go test",
+  "cargo test",
+  "npm run test:unit",
+  "npm run test:integration",
+  "npm run test:e2e"
+])
+
+function isTestCommandSafe(cmd: string): boolean {
+  const trimmed = cmd.trim()
+  if (SAFE_TEST_COMMANDS.has(trimmed)) return true
+  const base = trimmed.split(" ")[0]!
+  if (base === "npm" || base === "pnpm" || base === "yarn" || base === "bun") {
+    const args = trimmed.split(" ").slice(1).join(" ")
+    return args.startsWith("test") || args.startsWith("run test")
+  }
+  return false
+}
+
+function validateTestCommand(cmd: string): string {
+  if (isTestCommandSafe(cmd)) return cmd
+  throw new Error(`Unsafe test command "${cmd}". Allowed: npm test, jest, vitest, pytest, go test, etc.`)
+}
+
 type TestResult = {
   passed: number
   failed: number
@@ -48,7 +95,8 @@ export const runTestTool: ToolDefinition<
     try {
       const pkgContent = await ctx.workspace.readText("package.json")
       const pkg = JSON.parse(pkgContent) as any
-      const testScript = input.command ?? pkg.scripts?.test ?? "npm test"
+      const rawTestCmd = input.command ?? pkg.scripts?.test ?? "npm test"
+      const testScript = validateTestCommand(rawTestCmd)
 
       let stdout = ""
       let stderr = ""
@@ -182,7 +230,8 @@ export const rerunTestTool: ToolDefinition<
     try {
       const pkgContent = await ctx.workspace.readText("package.json")
       const pkg = JSON.parse(pkgContent) as any
-      const testCmd = input.command ?? pkg.scripts?.test ?? "npm test"
+      const rawTestCmd = input.command ?? pkg.scripts?.test ?? "npm test"
+      const testCmd = validateTestCommand(rawTestCmd)
 
       const rerunCmd = input.failedOnly
         ? `${testCmd} -- --testPathIgnorePatterns='' --testNamePattern='^(?!.*\\b(passed|skip)\\b).*$'`
@@ -376,13 +425,13 @@ function parseTestContent(content: string, format: string): TestCase[] {
 
 function parseJUnit(xml: string): TestCase[] {
   const tests: TestCase[] = []
-  const testCaseRegex = /<testcase[^>]+name="([^"]+)"[^>]*>/g
+  const testCaseRegex = /<testcase[^>]+name=(['"])([^'"]+)\1[^>]*>/g
   let match
   while ((match = testCaseRegex.exec(xml)) !== null) {
-    const name = match[1] ?? ""
+    const name = match[2] ?? ""
     const after = xml.slice(match.index)
-    const timeMatch = /time="([^"]+)"/.exec(after)
-    const time = timeMatch ? parseFloat(timeMatch[1]!) : 0
+    const timeMatch = /time=(['"])([^'"]+)\1/.exec(after)
+    const time = timeMatch ? parseFloat(timeMatch[2]!) : 0
     const isFailed = after.slice(0, 500).includes("<failure") || after.slice(0, 500).includes("<error")
     const isSkipped = after.slice(0, 500).includes("<skipped")
     tests.push({
@@ -496,7 +545,7 @@ function parseIstanbulCoverage(json: string): { summary: CoverageSummary; files:
       summary.branches = avg(files.map(f => f.branches))
     }
 
-    return { summary, files: files.slice(0, 50) }
+    return { summary, files }
   } catch {
     return { summary: { lines: 0, statements: 0, functions: 0, branches: 0 }, files: [] }
   }
@@ -520,9 +569,9 @@ function parseLcov(lcov: string): { summary: CoverageSummary; files: FileCoverag
       currentLines = 0
       currentBranches = 0
     } else if (line.startsWith("LH:")) {
-      currentLines = Math.round((parseFloat(line.slice(3)) / 100) * 100)
+      currentLines = Math.round(parseFloat(line.slice(3)))
     } else if (line.startsWith("BRH:")) {
-      currentBranches = Math.round((parseFloat(line.slice(4)) / 100) * 100)
+      currentBranches = Math.round(parseFloat(line.slice(4)))
     }
   }
 
@@ -534,6 +583,6 @@ function parseLcov(lcov: string): { summary: CoverageSummary; files: FileCoverag
       functions: avg(files.map(f => f.functions)),
       branches: avg(files.map(f => f.branches))
     },
-    files: files.slice(0, 50)
+    files
   }
 }
