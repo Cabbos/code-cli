@@ -1,4 +1,4 @@
-import { promises as fs } from "node:fs"
+import { promises as fs, lstatSync, realpathSync } from "node:fs"
 import path from "node:path"
 
 export type WorkspaceOptions = {
@@ -22,19 +22,22 @@ export class Workspace {
     const rel = path.relative(this.rootDir, resolved)
     const isInside = !rel.startsWith("..") && !path.isAbsolute(rel)
     if (!isInside) throw new Error("Path escapes workspace root")
-    this.checkSymlinkSafety(resolved)
+    this.checkSymlinkSafetySinglePass(resolved)
     return resolved
   }
 
-  private checkSymlinkSafety(absPath: string): void {
-    const parts = absPath.slice(this.rootDir.length).split(path.sep).filter(Boolean)
+  private checkSymlinkSafetySinglePass(absPath: string): void {
     let current = this.rootDir
-    for (const part of parts) {
+    let remaining = absPath.slice(this.rootDir.length)
+    while (remaining) {
+      const sepIdx = remaining.indexOf(path.sep)
+      const part = sepIdx === -1 ? remaining : remaining.slice(0, sepIdx)
+      remaining = sepIdx === -1 ? "" : remaining.slice(sepIdx + 1)
       current = path.join(current, part)
       try {
-        const stat = require("node:fs").lstatSync(current)
+        const stat = lstatSync(current)
         if (stat.isSymbolicLink()) {
-          const realPath = require("node:fs").realpathSync(current)
+          const realPath = realpathSync(current)
           const realRel = path.relative(this.rootDir, realPath)
           if (realRel.startsWith("..") || path.isAbsolute(realRel)) {
             throw new Error("Path contains symlink pointing outside workspace")
