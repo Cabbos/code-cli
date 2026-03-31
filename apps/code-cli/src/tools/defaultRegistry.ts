@@ -20,6 +20,13 @@ import {
   renameSymbolTool,
   wrapWithTryCatchTool
 } from "./builtins/ast"
+import {
+  conflictsTool,
+  graphTool,
+  listDepsTool,
+  outdatedTool,
+  whyTool
+} from "./builtins/deps"
 import { ToolPolicy } from "./policy"
 
 export function createDefaultToolRegistry(opts?: { policy?: ToolPolicy }): ToolRegistry {
@@ -42,5 +49,10 @@ export function createDefaultToolRegistry(opts?: { policy?: ToolPolicy }): ToolR
   reg.register(wrapWithTryCatchTool)
   reg.register(addTypeAnnotationTool)
   reg.register(extractFunctionTool)
+  reg.register(listDepsTool)
+  reg.register(outdatedTool)
+  reg.register(graphTool)
+  reg.register(conflictsTool)
+  reg.register(whyTool)
   return reg
 }

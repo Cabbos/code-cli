@@ -99,6 +99,31 @@
       "name": "tool_ast_extractFunction",
       "prompt": "tool:ast.extractFunction {\"path\":\"src/tools/defaultRegistry.ts\",\"functionName\":\"createDefaultToolRegistry\",\"newFilePath\":\"evals/replay-workspace/extracted_fn.ts\"}",
       "expectContains": "newFile"
+    },
+    {
+      "name": "tool_deps_list",
+      "prompt": "tool:deps.list {\"packageJsonPath\":\"package.json\",\"includeDev\":true}",
+      "expectContains": "dependencies"
+    },
+    {
+      "name": "tool_deps_outdated",
+      "prompt": "tool:deps.outdated {\"packageJsonPath\":\"package.json\"}",
+      "expectContains": "outdated"
+    },
+    {
+      "name": "tool_deps_graph_dot",
+      "prompt": "tool:deps.graph {\"format\":\"dot\",\"maxDepth\":1}",
+      "expectContains": "digraph"
+    },
+    {
+      "name": "tool_deps_conflicts",
+      "prompt": "tool:deps.conflicts {\"packageJsonPath\":\"package.json\"}",
+      "expectContains": "conflicts"
+    },
+    {
+      "name": "tool_deps_why_typescript",
+      "prompt": "tool:deps.why {\"packageName\":\"typescript\"}",
+      "expectContains": "typescript"
     }
   ]
 }

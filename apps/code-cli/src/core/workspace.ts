@@ -7,8 +7,10 @@ export type WorkspaceOptions = {
 }
 
 export class Workspace {
-  private readonly rootDir: string
+  readonly rootDir: string
   private readonly maxFileBytes: number
+
+  get root(): string { return this.rootDir }
 
   constructor(opts: WorkspaceOptions) {
     this.rootDir = path.resolve(opts.rootDir)
