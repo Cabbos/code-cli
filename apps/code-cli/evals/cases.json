@@ -124,6 +124,16 @@
       "name": "tool_deps_why_typescript",
       "prompt": "tool:deps.why {\"packageName\":\"typescript\"}",
       "expectContains": "typescript"
+    },
+    {
+      "name": "tool_test_parse_no_report",
+      "prompt": "tool:test.parse {\"reportPath\":\"__nonexistent__/report.xml\"}",
+      "expectContains": "summary"
+    },
+    {
+      "name": "tool_test_coverage_no_report",
+      "prompt": "tool:test.coverage {\"reportPath\":\"__nonexistent__/coverage.json\"}",
+      "expectContains": "summary"
     }
   ]
 }

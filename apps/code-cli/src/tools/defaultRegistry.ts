@@ -27,6 +27,12 @@ import {
   outdatedTool,
   whyTool
 } from "./builtins/deps"
+import {
+  coverageTool,
+  parseTestTool,
+  rerunTestTool,
+  runTestTool
+} from "./builtins/test"
 import { ToolPolicy } from "./policy"
 
 export function createDefaultToolRegistry(opts?: { policy?: ToolPolicy }): ToolRegistry {
@@ -54,5 +60,9 @@ export function createDefaultToolRegistry(opts?: { policy?: ToolPolicy }): ToolR
   reg.register(graphTool)
   reg.register(conflictsTool)
   reg.register(whyTool)
+  reg.register(runTestTool)
+  reg.register(parseTestTool)
+  reg.register(rerunTestTool)
+  reg.register(coverageTool)
   return reg
 }
