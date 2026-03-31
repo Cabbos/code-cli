@@ -14,6 +14,7 @@ import { loadConfig } from "./config/loadConfig"
 import { CodeCliConfig, CodeCliConfigOverrides } from "./config/types"
 import { SessionStore } from "./session/store"
 import { ToolPolicy } from "./tools/policy"
+import { LlmMessage } from "./llm/types"
 
 type PackageJson = {
   name?: string
@@ -193,6 +194,10 @@ program
         ? await createJsonlTraceWriter(opts.traceFile ?? defaultTraceFile(root, `chat-${session.id}.jsonl`))
         : undefined
     const trace = traceWriter ? traceWriter.write : undefined
+    const defaultStream = process.stdin.isTTY
+    const isStream = opts.stream !== false ? defaultStream : opts.stream
+    const traceHistory: Array<{ step: number; name: string; resultChars: number; truncated: boolean }> = []
+
     trace?.({
       type: "chat.start",
       mode: "chat",
@@ -205,11 +210,84 @@ program
       ...(typeof opts.maxToolOutput === "number" ? { maxToolResultChars: opts.maxToolOutput } : {}),
       ...(typeof opts.maxTotalToolOutput === "number" ? { maxTotalToolResultChars: opts.maxTotalToolOutput } : {})
     })
+
+    let interrupted = false
+    const interruptHandler = () => {
+      interrupted = true
+      process.stdout.write(chalk.yellow("\n[Interrupted] Saving session...\n"))
+    }
+    process.on("SIGINT", interruptHandler)
+
     try {
       while (true) {
+        if (interrupted) {
+          await store.save(session)
+          process.stdout.write(chalk.green(`\nSession saved: ${session.id}\n`))
+          process.stdout.write(chalk.dim(`Use :resume ${session.id} to continue\n`))
+          break
+        }
+
         const line = (await rl.question(chalk.cyan("> "))).trim()
         if (!line) continue
-        if (line === ":q" || line === ":quit" || line === ":exit") break
+
+        if (line === ":q" || line === ":quit" || line === ":exit") {
+          await store.save(session)
+          process.stdout.write(chalk.green(`Session saved: ${session.id}\n`))
+          break
+        }
+
+        if (line.startsWith(":resume ") || line === ":resume") {
+          const targetId = line.split(" ")[1] ?? session.id
+          try {
+            const target = await store.load(targetId)
+            session.messages = target.messages
+            session.updatedAt = target.updatedAt
+            process.stdout.write(chalk.green(`Resumed session: ${targetId} (${target.messages.length} messages)\n`))
+            continue
+          } catch {
+            process.stdout.write(chalk.red(`Session not found: ${targetId}\n`))
+            continue
+          }
+        }
+
+        if (line === ":continue") {
+          const lastUser = findLastUserMessage(session.messages)
+          if (lastUser) {
+            session.messages.pop()
+            process.stdout.write(chalk.dim(`Continuing from: "${lastUser.content.slice(0, 50)}..."\n`))
+          } else {
+            process.stdout.write(chalk.yellow("No previous message to continue from\n"))
+            continue
+          }
+        }
+
+        if (line === ":retry") {
+          const lastFailed = findLastFailedToolResult(session.messages)
+          if (lastFailed) {
+            const userMsg = findPreviousUserMessage(session.messages, lastFailed)
+            if (userMsg) {
+              session.messages = session.messages.slice(0, session.messages.indexOf(userMsg) + 1)
+              process.stdout.write(chalk.dim(`Retrying last failed tool call\n`))
+            } else {
+              process.stdout.write(chalk.yellow("Could not find context to retry\n"))
+              continue
+            }
+          } else {
+            process.stdout.write(chalk.yellow("No failed tool calls to retry\n"))
+            continue
+          }
+        }
+
+        if (line === ":trace") {
+          printTraceSummary(traceHistory)
+          continue
+        }
+
+        if (line === ":help" || line === ":?") {
+          printHelp()
+          continue
+        }
+
         trace?.({ type: "turn.start", ts: Date.now(), inputPreview: truncateForTrace(line) })
         const out = await runAgentTurn({
           provider,
@@ -219,7 +297,7 @@ program
           messages: session.messages,
           userInput: line,
           ...(typeof systemPrompt === "string" ? { systemPrompt } : {}),
-          ...(typeof opts.stream === "boolean" ? { stream: opts.stream } : {}),
+          ...(isStream !== undefined ? { stream: isStream } : {}),
           ...(typeof opts.maxSteps === "number" ? { maxSteps: opts.maxSteps } : {}),
           ...(typeof opts.maxToolOutput === "number" ? { maxToolResultChars: opts.maxToolOutput } : {}),
           ...(typeof opts.maxTotalToolOutput === "number" ? { maxTotalToolResultChars: opts.maxTotalToolOutput } : {}),
@@ -227,6 +305,20 @@ program
           ...(trace ? { trace } : {}),
           ...(shouldSanitizeToolNames(config.llm.provider) ? { sanitizeToolNames: true } : {})
         })
+
+        const toolCallsInTurn = out.messages.filter(
+          (m) => m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0
+        ).length
+        if (toolCallsInTurn > 0) {
+          traceHistory.push({
+            step: traceHistory.length,
+            name: "turn",
+            resultChars: out.content.length,
+            truncated: false
+          })
+          if (traceHistory.length > 20) traceHistory.shift()
+        }
+
         trace?.({
           type: "turn.end",
           ts: Date.now(),
@@ -235,9 +327,10 @@ program
           messageCount: out.messages.length
         })
         await store.save(session)
-        if (!opts.stream) process.stdout.write(`${out.content}\n`)
+        if (!isStream) process.stdout.write(`${out.content}\n`)
       }
     } finally {
+      process.removeListener("SIGINT", interruptHandler)
       rl.close()
       trace?.({ type: "chat.end", mode: "chat", ts: Date.now(), sessionId: session.id, messageCount: session.messages.length })
       if (traceWriter) await traceWriter.close()
@@ -328,6 +421,62 @@ function truncateForTrace(s: string, max = 200): string {
   const out = s.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim()
   if (out.length <= max) return out
   return `${out.slice(0, max)}…`
+}
+
+function findLastUserMessage(messages: LlmMessage[]): LlmMessage | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m && m.role === "user") return m
+  }
+  return null
+}
+
+function findLastFailedToolResult(messages: LlmMessage[]): LlmMessage | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m && m.role === "tool") {
+      try {
+        const parsed = JSON.parse(m.content)
+        if (parsed?.error) return m
+      } catch {}
+    }
+  }
+  return null
+}
+
+function findPreviousUserMessage(messages: LlmMessage[], toolMsg: LlmMessage): LlmMessage | null {
+  const idx = messages.indexOf(toolMsg)
+  for (let i = idx - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m && m.role === "user") return m
+  }
+  return null
+}
+
+type TraceEntry = { step: number; name: string; resultChars: number; truncated: boolean }
+
+function printTraceSummary(history: TraceEntry[]): void {
+  if (history.length === 0) {
+    process.stdout.write(chalk.dim("No trace history\n"))
+    return
+  }
+  process.stdout.write(chalk.bold("\nTrace Summary:\n"))
+  for (const entry of history) {
+    const icon = entry.truncated ? chalk.yellow("⚠") : chalk.green("✓")
+    process.stdout.write(`${icon} Step ${entry.step}: ${entry.name} (${entry.resultChars} chars)\n`)
+  }
+  process.stdout.write("\n")
+}
+
+function printHelp(): void {
+  process.stdout.write(chalk.bold("\nAvailable commands:\n"))
+  process.stdout.write("  :q, :quit, :exit    Exit and save session\n")
+  process.stdout.write("  :resume [id]        Resume a session by id\n")
+  process.stdout.write("  :continue           Continue from last user message\n")
+  process.stdout.write("  :retry              Retry last failed tool call\n")
+  process.stdout.write("  :trace              Show trace summary\n")
+  process.stdout.write("  :help, :?          Show this help\n")
+  process.stdout.write("\n")
 }
 
 async function createConfirmFn(opts: { enabled: boolean }) {
