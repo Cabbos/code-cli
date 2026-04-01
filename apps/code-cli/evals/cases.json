@@ -134,6 +134,17 @@
       "name": "tool_test_coverage_no_report",
       "prompt": "tool:test.coverage {\"reportPath\":\"__nonexistent__/coverage.json\"}",
       "expectContains": "summary"
+    },
+    {
+      "name": "tool_skill_simplify_context_binding",
+      "prompt": "tool:Skill {\"name\":\"simplify\",\"userMessage\":\"Please simplify this\\n\\n```ts\\nconst result = foo ? foo : bar\\n```\"}",
+      "expectContains": "const result = foo ? foo : bar",
+      "expectNotContains": ["{{code}}", "{{language}}"]
+    },
+    {
+      "name": "tool_skill_project_skill",
+      "prompt": "tool:Skill {\"name\":\"project-echo\",\"userMessage\":\"hello from project skill\"}",
+      "expectContains": "Project skill received"
     }
   ]
 }

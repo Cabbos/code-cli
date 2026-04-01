@@ -5,6 +5,7 @@ import { createInitialMessages, runAgentTurn } from "../agent/runAgent"
 import { createProviderFromEnv } from "../llm/factory"
 import { Workspace } from "../core/workspace"
 import { createDefaultToolRegistry } from "../tools/defaultRegistry"
+import { initFeatureFlags } from "../skills/featureFlags"
 
 type JsonType = "string" | "number" | "boolean" | "null" | "array" | "object"
 
@@ -52,6 +53,7 @@ async function main() {
   const { provider, model } = createProviderFromEnv()
   const workspaceRoot = process.env.CODECLI_EVAL_WORKSPACE ?? root
   const workspace = new Workspace({ rootDir: workspaceRoot })
+  initFeatureFlags()
   const tools = createDefaultToolRegistry()
 
   const systemPrompt =

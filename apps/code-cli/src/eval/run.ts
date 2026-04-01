@@ -5,9 +5,15 @@ import { runAgent } from "../agent/runAgent"
 import { MockProvider } from "../llm/mock"
 import { Workspace } from "../core/workspace"
 import { createDefaultToolRegistry } from "../tools/defaultRegistry"
+import { initFeatureFlags } from "../skills/featureFlags"
 
 type CaseFile = {
-  cases: Array<{ name: string; prompt: string; expectContains: string }>
+  cases: Array<{
+    name: string
+    prompt: string
+    expectContains: string
+    expectNotContains?: string[]
+  }>
 }
 
 async function main() {
@@ -18,6 +24,7 @@ async function main() {
   const raw = await fs.readFile(filePath, "utf8")
   const data = JSON.parse(raw) as CaseFile
 
+  initFeatureFlags()
   const provider = new MockProvider()
   const tools = createDefaultToolRegistry()
   const workspace = new Workspace({ rootDir: monorepoRoot })
@@ -34,11 +41,16 @@ async function main() {
       stream: false,
       maxSteps: 4
     })
-    const ok = out.includes(c.expectContains)
+    const okContains = out.includes(c.expectContains)
+    const okNotContains = (c.expectNotContains ?? []).every((value) => !out.includes(value))
+    const ok = okContains && okNotContains
     process.stdout.write(`${ok ? "PASS" : "FAIL"}\t${c.name}\n`)
     if (!ok) {
       failed++
       process.stdout.write(`expected substring: ${c.expectContains}\n`)
+      if (!okNotContains) {
+        process.stdout.write(`unexpected substrings: ${(c.expectNotContains ?? []).filter((value) => out.includes(value)).join(", ")}\n`)
+      }
       process.stdout.write(`actual: ${out}\n`)
     }
   }

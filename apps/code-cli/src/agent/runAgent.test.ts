@@ -15,8 +15,9 @@ describe("runAgent", () => {
     it("should handle empty system prompt", () => {
       const messages = createInitialMessages("")
       expect(messages).toHaveLength(1)
-      expect(messages[0].role).toBe("system")
-      expect(messages[0].content).toBe("")
+      const firstMsg = messages[0]
+      expect(firstMsg?.role).toBe("system")
+      expect(firstMsg?.content).toBe("")
     })
   })
 })

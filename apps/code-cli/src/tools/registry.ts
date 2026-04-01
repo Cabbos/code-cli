@@ -1,6 +1,7 @@
 import { ToolContext, ToolDefinition } from "./types"
 import { ToolPolicy, isToolAllowed, needsConfirmation } from "./policy"
 import { validateJsonSchema } from "./validate"
+import { isToolAllowedInSkillContext, getAllowedTools } from "../skills/skillContext"
 
 export class ToolRegistry {
   private readonly tools = new Map<string, ToolDefinition<any, any>>()
@@ -38,6 +39,16 @@ export class ToolRegistry {
     if (!tool) throw new Error(`Unknown tool: ${name}`)
     const allowed = isToolAllowed(name, this.policy)
     if (!allowed.ok) throw new Error(`Tool blocked by policy: ${allowed.reason}`)
+
+    // Check skill context restrictions (if a skill is active)
+    if (!isToolAllowedInSkillContext(name)) {
+      const allowedTools = getAllowedTools()
+      throw new Error(
+        `Tool "${name}" is not allowed in the current skill context. ` +
+        `Allowed tools: ${allowedTools?.join(", ") || "none"}`
+      )
+    }
+
     if (tool.inputSchema) {
       const vr = validateJsonSchema(tool.inputSchema, input)
       if (!vr.ok) throw new Error(`Invalid tool input: ${vr.error}`)

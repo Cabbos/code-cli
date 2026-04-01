@@ -5,6 +5,7 @@ import { createDefaultToolRegistry } from "../tools/defaultRegistry"
 import { Workspace } from "../core/workspace"
 import { ToolPolicy } from "../tools/policy"
 import { createHash } from "node:crypto"
+import { initFeatureFlags } from "../skills/featureFlags"
 
 type ReplayOptions = {
   traceFile: string
@@ -50,6 +51,7 @@ async function main() {
   const workspaceRoot =
     opts.workspaceRoot ?? (typeof runStart?.workspace === "string" ? runStart.workspace : baseDir)
   const policy: ToolPolicy = { readonly: !opts.allowWrites }
+  initFeatureFlags()
   const tools = createDefaultToolRegistry({ policy })
   const workspace = new Workspace({ rootDir: workspaceRoot })
 

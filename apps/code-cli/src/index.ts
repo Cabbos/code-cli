@@ -15,6 +15,9 @@ import { CodeCliConfig, CodeCliConfigOverrides } from "./config/types"
 import { SessionStore } from "./session/store"
 import { ToolPolicy } from "./tools/policy"
 import { LlmMessage } from "./llm/types"
+import { bundledSkills } from "./skills/bundled"
+import { loadProjectSkills, loadUserSkills } from "./skills/loader"
+import { initFeatureFlags, isFeatureEnabled } from "./skills/featureFlags"
 
 type PackageJson = {
   name?: string
@@ -66,6 +69,100 @@ program
   .option("-n, --name <name>", "Name to greet", "world")
   .action((opts: { name: string }) => {
     process.stdout.write(chalk.green(`hello ${opts.name}\n`))
+  })
+
+program
+  .command("skills")
+  .description("List available skills")
+  .option("--source <source>", "Filter by source: bundled|project|user")
+  .action(async (opts: { source?: string }) => {
+    await resolveConfig()
+    const workspaceRoot = (program.opts() as GlobalOpts).workspace
+
+    process.stdout.write(chalk.bold("\nAvailable Skills:\n"))
+    process.stdout.write(chalk.dim("=".repeat(50)) + "\n")
+
+    const showBundled = !opts.source || opts.source === "bundled"
+    if (showBundled) {
+      const availableBundledSkills = bundledSkills.filter(isSkillAvailable)
+      if (availableBundledSkills.length > 0) {
+        process.stdout.write(chalk.bold("\n[Bundled]\n"))
+        for (const skill of availableBundledSkills) {
+          process.stdout.write(chalk.green(`  ${skill.name}`) + chalk.dim(` - ${skill.description}\n`))
+          if (skill.arguments && skill.arguments.length > 0) {
+            const argsStr = skill.arguments.map((a) => `${a.name}${a.required ? "*" : "?"}`).join(", ")
+            process.stdout.write(chalk.dim(`    args: ${argsStr}\n`))
+          }
+        }
+      }
+    }
+
+    const showProject = !opts.source || opts.source === "project"
+    if (showProject) {
+      const projectSkills = await loadProjectSkills(workspaceRoot)
+      if (projectSkills.length > 0) {
+        process.stdout.write(chalk.bold("\n[Project]\n"))
+        for (const skill of projectSkills) {
+          process.stdout.write(chalk.cyan(`  ${skill.name}`) + chalk.dim(` - ${skill.description}\n`))
+        }
+      }
+    }
+
+    const showUser = !opts.source || opts.source === "user"
+    if (showUser) {
+      const userSkills = await loadUserSkills()
+      if (userSkills.length > 0) {
+        process.stdout.write(chalk.bold("\n[User]\n"))
+        for (const skill of userSkills) {
+          process.stdout.write(chalk.magenta(`  ${skill.name}`) + chalk.dim(` - ${skill.description}\n`))
+        }
+      }
+    }
+
+    process.stdout.write("\n")
+    process.stdout.write(chalk.dim("Use Skill in chat mode to invoke a listed skill.\n"))
+    process.stdout.write(chalk.dim("Create skills in .code-cli/skills/<name>/SKILL.md\n"))
+  })
+
+program
+  .command("skill:create")
+  .description("Create a new skill from a template")
+  .argument("<name>", "Skill name (kebab-case)")
+  .argument("<description>", "One-line description")
+  .option("--path <path>", "Directory to create skill in", ".code-cli/skills")
+  .action(async (name: string, description: string, opts: { path: string }) => {
+    const { promises: fs } = await import("node:fs")
+    const g = program.opts() as GlobalOpts
+    const workspaceRoot = g.workspace
+    const skillDir = path.join(workspaceRoot, opts.path, name)
+    const skillFile = path.join(skillDir, "SKILL.md")
+
+    // Check if already exists
+    try {
+      await fs.readFile(skillFile, "utf8")
+      process.stdout.write(chalk.red(`Skill "${name}" already exists at ${skillFile}\n`))
+      return
+    } catch {}
+
+    // Create directory
+    try {
+      await fs.mkdir(skillDir, { recursive: true })
+    } catch (err: any) {
+      if (err.code !== "EEXIST") {
+        process.stdout.write(chalk.red(`Failed to create directory: ${err.message}\n`))
+        return
+      }
+    }
+
+    const content = createSkillTemplate(name, description)
+
+    try {
+      await fs.writeFile(skillFile, content, "utf8")
+      process.stdout.write(chalk.green(`Created skill: ${name}\n`))
+      process.stdout.write(chalk.dim(`  Path: ${skillFile}\n`))
+    } catch (err: any) {
+      process.stdout.write(chalk.red(`Failed to create skill: ${err.message}\n`))
+    }
   })
 
 program
@@ -392,11 +489,14 @@ async function resolveConfig(): Promise<CodeCliConfig> {
     overrides.agent = { ...(typeof g.systemPrompt === "string" ? { systemPrompt: g.systemPrompt } : {}) }
   }
 
-  return loadConfig({
+  const config = await loadConfig({
     workspaceRoot: g.workspace,
     ...(typeof g.config === "string" ? { configPath: g.config } : {}),
     overrides
   })
+
+  initFeatureFlags(config.features?.flags)
+  return config
 }
 
 function toToolPolicy(config: CodeCliConfig): ToolPolicy {
@@ -415,6 +515,46 @@ function shouldSanitizeToolNames(provider: string): boolean {
 
 function defaultTraceFile(workspaceRoot: string, basename: string): string {
   return path.join(workspaceRoot, ".code-cli", "traces", basename)
+}
+
+function isSkillAvailable(skill: { name: string; isEnabled?: () => boolean }): boolean {
+  if (skill.isEnabled && !skill.isEnabled()) return false
+  return isFeatureEnabled(skill.name)
+}
+
+function createSkillTemplate(name: string, description: string): string {
+  return `---
+name: ${name}
+description: ${description}
+---
+
+# ${name}
+
+${description}
+
+## Arguments
+
+Add bullet lines here if the skill accepts arguments.
+Format:
+- argument_name (required): Description
+- optional_name [default: value]: Description
+
+## Prompt
+
+\`\`\`text
+You are a ${name} expert.
+
+User request:
+{{user_message}}
+
+{{#if code}}
+Relevant code:
+{{code}}
+{{/if}}
+
+Respond with the result.
+\`\`\`
+`
 }
 
 function truncateForTrace(s: string, max = 200): string {

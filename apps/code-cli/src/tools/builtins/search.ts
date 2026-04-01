@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+import path from "node:path"
 import { ToolDefinition } from "../types"
 
 type SearchInput = {
@@ -42,12 +43,16 @@ export const searchRgTool: ToolDefinition<SearchInput, { matches: SearchMatch[];
     const useRegex = input.regex ?? false
 
     const cwd = ctx.workspace.root
+    const searchRoot = dir === "." ? cwd : ctx.workspace.resolvePath(dir)
     const args: string[] = []
 
     if (!caseSensitive) args.push("-i")
     if (useRegex) args.push("--regex")
     else args.push("-F")
-    args.push("--json", input.pattern)
+    if (typeof input.maxDepth === "number") args.push("--max-depth", String(input.maxDepth))
+    else if (input.recursive === false) args.push("--max-depth", "0")
+    if (maxResults > 0) args.push("--max-count", String(maxResults))
+    args.push("--json", input.pattern, searchRoot)
 
     try {
       const output = await new Promise<string>((resolve, reject) => {
@@ -60,7 +65,7 @@ export const searchRgTool: ToolDefinition<SearchInput, { matches: SearchMatch[];
         })
       })
 
-      const matches = parseRgJsonOutput(output, maxResults)
+      const matches = parseRgJsonOutput(output, maxResults, cwd)
       return { matches, truncated: matches.length >= maxResults }
     } catch {
       return fallbackSearch(input, ctx, dir, maxResults, caseSensitive, useRegex)
@@ -125,7 +130,7 @@ async function fallbackSearch(
   return { matches, truncated: matches.length >= maxResults }
 }
 
-function parseRgJsonOutput(output: string, maxResults: number): SearchMatch[] {
+function parseRgJsonOutput(output: string, maxResults: number, workspaceRoot: string): SearchMatch[] {
   const matches: SearchMatch[] = []
   const lines = output.split("\n").filter(Boolean)
 
@@ -135,10 +140,21 @@ function parseRgJsonOutput(output: string, maxResults: number): SearchMatch[] {
       const entry = JSON.parse(line)
       if (entry.type !== "match") continue
       const data = entry.data
+      const rawPath = data.path?.text ?? data.path ?? ""
+      const normalizedPath =
+        typeof rawPath === "string" && path.isAbsolute(rawPath)
+          ? path.relative(workspaceRoot, rawPath)
+          : rawPath
+      const col =
+        typeof data.submatches?.[0]?.start === "number"
+          ? data.submatches[0].start + 1
+          : typeof data.columns?.start === "number"
+            ? data.columns.start + 1
+            : 1
       matches.push({
-        path: data.path?.text ?? data.path ?? "",
+        path: normalizedPath,
         line: data.line_number ?? 0,
-        col: data.columns?.start ?? 0,
+        col,
         preview: (data.lines?.text ?? "").trim().slice(0, 300)
       })
     } catch {
@@ -146,7 +162,11 @@ function parseRgJsonOutput(output: string, maxResults: number): SearchMatch[] {
     }
   }
 
-  return matches
+  return matches.sort((left, right) => {
+    if (left.path !== right.path) return left.path.localeCompare(right.path)
+    if (left.line !== right.line) return left.line - right.line
+    return left.col - right.col
+  })
 }
 
 function locate(text: string, idx: number): { line: number; col: number; preview: string } {

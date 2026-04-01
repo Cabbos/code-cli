@@ -1,10 +1,13 @@
 import { Workspace } from "../core/workspace"
+import { LlmMessage } from "../llm/types"
 
 export type ToolConfirmFn = (req: { name: string; input: unknown }) => Promise<boolean>
 
 export type ToolContext = {
   workspace: Workspace
   confirm?: ToolConfirmFn
+  messages?: LlmMessage[]
+  currentUserInput?: string
 }
 
 export type ToolDefinition<I = unknown, O = unknown> = {

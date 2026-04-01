@@ -3,6 +3,8 @@ import { LlmMessage, LlmProvider, LlmTool, LlmToolCall } from "../llm/types"
 import { ToolRegistry } from "../tools/registry"
 import { ToolConfirmFn } from "../tools/types"
 import { createHash } from "node:crypto"
+import { setActiveSkill, clearActiveSkill } from "../skills/skillContext"
+import { SkillDefinition } from "../skills/types"
 
 export type RunAgentParams = {
   provider: LlmProvider
@@ -106,7 +108,10 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<RunAgent
 
     params.messages.push({ role: "assistant", content: res.content, toolCalls: res.toolCalls })
 
-    if (!res.toolCalls.length) return { content: res.content, messages: params.messages }
+    if (!res.toolCalls.length) {
+      clearActiveSkill() // Clear skill context when turn ends
+      return { content: res.content, messages: params.messages }
+    }
 
     for (const tc of res.toolCalls) {
       const toolMsg = await executeToolCall(
@@ -120,6 +125,8 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<RunAgent
           maxToolResultChars,
           maxTotalToolResultChars,
           totalToolChars,
+          messages: params.messages,
+          currentUserInput: params.userInput,
           ...(params.trace ? { trace: params.trace } : {})
         }
       )
@@ -129,6 +136,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<RunAgent
     }
   }
 
+  clearActiveSkill() // Clear skill context when max steps reached
   return { content: "Agent stopped: max steps reached", messages: params.messages }
 }
 
@@ -143,12 +151,19 @@ async function executeToolCall(
     maxToolResultChars: number
     maxTotalToolResultChars: number
     totalToolChars: number
+    messages?: LlmMessage[]
+    currentUserInput?: string
     trace?: (event: unknown) => void
   }
 ): Promise<LlmMessage> {
   try {
     const internalName = llmToInternal?.[tc.name] ?? tc.name
-    const ctx = { workspace, ...(confirm ? { confirm } : {}) }
+    const ctx = {
+      workspace,
+      ...(confirm ? { confirm } : {}),
+      ...(limits?.messages ? { messages: limits.messages } : {}),
+      ...(typeof limits?.currentUserInput === "string" ? { currentUserInput: limits.currentUserInput } : {})
+    }
     if (limits && limits.totalToolChars >= limits.maxTotalToolResultChars) {
       const content = stableJson({
         truncated: true,
@@ -166,8 +181,25 @@ async function executeToolCall(
       input: sanitizeForTrace(tc.input)
     })
     const toolStart = Date.now()
+
+    // Set skill context when Skill tool is invoked
+    const isSkillTool = internalName === "Skill"
+    if (isSkillTool) {
+      const skillInput = tc.input as { name?: string; arguments?: Record<string, string> }
+      // The skill context will be set by the SkillTool.invoke() itself
+    }
+
     const result = await tools.call(internalName, tc.input, ctx)
-    const raw = stableJson(result)
+
+    // If Skill tool was invoked, set the active skill context for subsequent tool calls
+    if (isSkillTool && typeof result === "object" && result !== null && "ok" in result) {
+      const skillResult = result as { ok: boolean; skill?: SkillDefinition }
+      if (skillResult.ok && skillResult.skill) {
+        setActiveSkill(skillResult.skill)
+      }
+    }
+
+    const raw = stableJson(sanitizeToolResultForMessage(internalName, result))
     const limited =
       limits && raw.length > limits.maxToolResultChars
         ? stableJson({
@@ -240,6 +272,31 @@ function sanitizeForTrace(v: unknown, depth = 0): unknown {
 
 function stableJson(v: unknown): string {
   return JSON.stringify(v, null, 2)
+}
+
+function sanitizeToolResultForMessage(toolName: string, result: unknown): unknown {
+  if (toolName !== "Skill" || !result || typeof result !== "object" || Array.isArray(result)) {
+    return result
+  }
+
+  const record = result as Record<string, unknown>
+  const skill = record.skill
+  if (!skill || typeof skill !== "object" || Array.isArray(skill)) {
+    return result
+  }
+
+  const skillRecord = skill as Record<string, unknown>
+  const publicSkill: Record<string, unknown> = {}
+
+  if (typeof skillRecord.name === "string") publicSkill.name = skillRecord.name
+  if (typeof skillRecord.description === "string") publicSkill.description = skillRecord.description
+  if (typeof skillRecord.source === "string") publicSkill.source = skillRecord.source
+  if (Array.isArray(skillRecord.allowedTools)) publicSkill.allowedTools = skillRecord.allowedTools
+
+  return {
+    ...record,
+    skill: publicSkill
+  }
 }
 
 function createToolNameMap(

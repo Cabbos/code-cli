@@ -31,7 +31,8 @@
   "description": "A CLI starter project",
   "dependencies": {
     "chalk": "^4.1.2",
-    "commander": "^11.1.0"
+    "commander": "^11.1.0",
+    "ignore": "^5.3.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

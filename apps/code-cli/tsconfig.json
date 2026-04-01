@@ -1,5 +1,5 @@
 {
-  "exclude": ["evals/**", "node_modules", "dist/**", "scripts/**"],
+  "exclude": ["evals/**", "node_modules", "dist/**", "scripts/**", "vitest.config.ts"],
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist",

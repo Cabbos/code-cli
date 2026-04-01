@@ -34,8 +34,11 @@ import {
   runTestTool
 } from "./builtins/test"
 import { ToolPolicy } from "./policy"
+import { SkillDefinition } from "../skills/types"
+import { createSkillTool } from "../skills/SkillTool"
+import { bundledSkills } from "../skills/bundled"
 
-export function createDefaultToolRegistry(opts?: { policy?: ToolPolicy }): ToolRegistry {
+export function createDefaultToolRegistry(opts?: { policy?: ToolPolicy; skills?: SkillDefinition[] }): ToolRegistry {
   const reg = new ToolRegistry(opts?.policy ? { policy: opts.policy } : undefined)
   reg.register(readFileTool)
   reg.register(writeFileTool)
@@ -64,5 +67,11 @@ export function createDefaultToolRegistry(opts?: { policy?: ToolPolicy }): ToolR
   reg.register(parseTestTool)
   reg.register(rerunTestTool)
   reg.register(coverageTool)
+
+  // Register SkillTool with bundled skills
+  const skillsToUse = opts?.skills ?? bundledSkills
+  const skillTool = createSkillTool(skillsToUse)
+  reg.register(skillTool)
+
   return reg
 }

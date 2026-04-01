@@ -58,7 +58,16 @@ function loadFromEnv(): CodeCliConfigOverrides {
   const confirmWritesEnv = process.env.CODECLI_TOOLS_CONFIRM_WRITES
   const systemPrompt = process.env.CODECLI_SYSTEM_PROMPT
 
-  return {
+  // Extract CODECLI_FEATURE_* environment variables
+  const featureFlags: Record<string, boolean> = {}
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith("CODECLI_FEATURE_")) {
+      const flagName = key.slice("CODECLI_FEATURE_".length).toLowerCase()
+      featureFlags[flagName] = parseBool(value ?? "false")
+    }
+  }
+
+  const result: CodeCliConfigOverrides = {
     llm: {
       ...(provider ? { provider } : {}),
       ...(model ? { model } : {}),
@@ -76,6 +85,12 @@ function loadFromEnv(): CodeCliConfigOverrides {
       ...(systemPrompt ? { systemPrompt } : {})
     }
   }
+
+  if (Object.keys(featureFlags).length > 0) {
+    result.features = { flags: featureFlags }
+  }
+
+  return result
 }
 
 function mergeConfig(...parts: Array<CodeCliConfigOverrides | undefined>): CodeCliConfig {
@@ -87,7 +102,13 @@ function mergeConfig(...parts: Array<CodeCliConfigOverrides | undefined>): CodeC
       llm: { ...out.llm, ...(p.llm ?? {}) },
       sessions: { ...out.sessions, ...(p.sessions ?? {}) },
       tools: { ...out.tools, ...(p.tools ?? {}) },
-      agent: { ...out.agent, ...(p.agent ?? {}) }
+      agent: { ...out.agent, ...(p.agent ?? {}) },
+      features: {
+        flags: {
+          ...(out.features?.flags ?? {}),
+          ...(p.features?.flags ?? {})
+        }
+      }
     }
   }
   return out

@@ -10,6 +10,7 @@ Built with Node.js, TypeScript, and designed to help developers explore AI agent
 - **Workspace Sandbox**: Strict directory bounds to prevent agent path traversal.
 - **Session Management**: Chat loops are saved locally and can be resumed or exported.
 - **Config & Policies**: Support for `readonly` mode, write confirmations, and tool allow/deny lists.
+- **Skill Runtime**: Bundled, project, and user skills can be listed and invoked through the `Skill` tool.
 - **Offline Evals**: A lightweight evaluation runner to verify tool behavior without hitting LLM APIs.
 - **Tracing & Replay**: JSONL trace output for debugging and offline tool-call replay.
 
@@ -134,6 +135,7 @@ This is an npm workspace monorepo:
 
 - `apps/code-cli`: The core agent CLI implementation.
   - `src/agent`: Core LLM interaction and tool-calling loop.
+  - `src/skills`: Skill runtime, loaders, bundled skills, and template handling.
   - `src/tools`: Registry and built-in tools (fs, git, search).
   - `src/core`: Workspace boundary enforcement.
   - `src/session`: Persistent chat sessions.
@@ -171,10 +173,52 @@ You can run the CLI directly via the local bin shim:
 # List available tools
 ./node_modules/.bin/ccode tools
 
+# List available skills
+./node_modules/.bin/ccode skills
+
+# Create a new project skill template
+./node_modules/.bin/ccode skill:create my-skill "One-line description"
+
 # Manage sessions
 ./node_modules/.bin/ccode session list
 ./node_modules/.bin/ccode session export <session-id>
 ```
+
+### Skills
+
+- Bundled skills are enabled by default and exposed through the `Skill` tool.
+- Project skills live in `<workspace>/.code-cli/skills/<name>/SKILL.md`.
+- User skills live in `~/.code-cli/skills/<name>/SKILL.md`.
+- `skills` only shows currently available skills after frontmatter and feature-flag filtering.
+
+Example `SKILL.md` shape:
+
+````md
+---
+name: explain-snippet
+description: Explain the current code snippet
+---
+
+# explain-snippet
+
+## Prompt
+
+```text
+Explain this request:
+{{user_message}}
+
+{{#if code}}
+Code:
+{{code}}
+{{/if}}
+```
+````
+
+Feature flags:
+
+- `features.flags.<skill_name>` or `CODECLI_FEATURE_<SKILL_NAME>` can disable an individual skill.
+- `features.flags.skill_shell_execution` or `CODECLI_FEATURE_SKILL_SHELL_EXECUTION` controls shell interpolation inside skill prompts.
+- Shell interpolation is disabled by default.
 
 ### Options & Security
 

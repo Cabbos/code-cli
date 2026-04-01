@@ -5,6 +5,7 @@ import { Workspace } from "../core/workspace"
 import { createDefaultToolRegistry } from "../tools/defaultRegistry"
 import { createInitialMessages, runAgentTurn } from "../agent/runAgent"
 import { createJsonlTraceWriter } from "../agent/trace"
+import { initFeatureFlags } from "../skills/featureFlags"
 
 type Fixture = {
   name: string
@@ -16,6 +17,7 @@ async function main() {
   const root = process.cwd()
   const workspaceRoot = path.join(root, "evals", "replay-workspace")
 
+  initFeatureFlags()
   const provider = new MockProvider()
   const tools = createDefaultToolRegistry()
   const workspace = new Workspace({ rootDir: workspaceRoot })
@@ -73,4 +75,3 @@ main().catch((err) => {
   process.stderr.write(`${err instanceof Error ? err.stack ?? err.message : String(err)}\n`)
   process.exit(1)
 })
-

@@ -19,6 +19,11 @@ export function defaultConfig(): CodeCliConfig {
     agent: {
       systemPrompt:
         "You are a coding agent. Use tools when you need to read/write/list files. Prefer tools over guessing. Keep outputs concise."
+    },
+    features: {
+      flags: {
+        skill_shell_execution: false
+      }
     }
   }
 }

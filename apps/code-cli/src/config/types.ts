@@ -20,11 +20,16 @@ export type AgentConfig = {
   systemPrompt?: string
 }
 
+export type FeatureFlagsConfig = {
+  flags?: Record<string, boolean>
+}
+
 export type CodeCliConfig = {
   llm: LlmConfig
   sessions: SessionsConfig
   tools: ToolsConfig
   agent: AgentConfig
+  features?: FeatureFlagsConfig
 }
 
 export type CodeCliConfigOverrides = {
@@ -32,4 +37,5 @@ export type CodeCliConfigOverrides = {
   sessions?: Partial<SessionsConfig>
   tools?: Partial<ToolsConfig>
   agent?: Partial<AgentConfig>
+  features?: Partial<FeatureFlagsConfig>
 }
