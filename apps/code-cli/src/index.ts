@@ -7,6 +7,13 @@ import { createDefaultToolRegistry } from "./tools/defaultRegistry"
 import { Workspace } from "./core/workspace"
 import { createInitialMessages, runAgentTurn } from "./agent/runAgent"
 import { createJsonlTraceWriter } from "./agent/trace"
+import {
+  formatRelativeTraceFile,
+  formatTraceSummary,
+  parseJsonlTrace,
+  summarizeTraceEvents,
+  TraceEventRecord
+} from "./agent/traceSummary"
 import readline from "node:readline/promises"
 import process from "node:process"
 import path from "node:path"
@@ -18,6 +25,20 @@ import { LlmMessage } from "./llm/types"
 import { bundledSkills } from "./skills/bundled"
 import { loadProjectSkills, loadUserSkills } from "./skills/loader"
 import { initFeatureFlags, isFeatureEnabled } from "./skills/featureFlags"
+import { listAllSkills } from "./skills/SkillTool"
+import {
+  formatSkillDoctorReport,
+  inspectNonBundledSkills,
+  inspectSkillDefinition
+} from "./skills/doctor"
+import {
+  exportSkillToDir,
+  installSkillToScope,
+  resolveSkillExportRoot,
+  resolveSkillInstallRoot,
+  resolveSkillInstallSource,
+  SkillInstallScope
+} from "./skills/install"
 
 type PackageJson = {
   name?: string
@@ -75,7 +96,8 @@ program
   .command("skills")
   .description("List available skills")
   .option("--source <source>", "Filter by source: bundled|project|user")
-  .action(async (opts: { source?: string }) => {
+  .option("--verbose", "Show extra skill metadata")
+  .action(async (opts: { source?: string; verbose?: boolean }) => {
     await resolveConfig()
     const workspaceRoot = (program.opts() as GlobalOpts).workspace
 
@@ -88,11 +110,7 @@ program
       if (availableBundledSkills.length > 0) {
         process.stdout.write(chalk.bold("\n[Bundled]\n"))
         for (const skill of availableBundledSkills) {
-          process.stdout.write(chalk.green(`  ${skill.name}`) + chalk.dim(` - ${skill.description}\n`))
-          if (skill.arguments && skill.arguments.length > 0) {
-            const argsStr = skill.arguments.map((a) => `${a.name}${a.required ? "*" : "?"}`).join(", ")
-            process.stdout.write(chalk.dim(`    args: ${argsStr}\n`))
-          }
+          printSkillLine(skill, chalk.green, Boolean(opts.verbose))
         }
       }
     }
@@ -103,7 +121,7 @@ program
       if (projectSkills.length > 0) {
         process.stdout.write(chalk.bold("\n[Project]\n"))
         for (const skill of projectSkills) {
-          process.stdout.write(chalk.cyan(`  ${skill.name}`) + chalk.dim(` - ${skill.description}\n`))
+          printSkillLine(skill, chalk.cyan, Boolean(opts.verbose))
         }
       }
     }
@@ -114,7 +132,7 @@ program
       if (userSkills.length > 0) {
         process.stdout.write(chalk.bold("\n[User]\n"))
         for (const skill of userSkills) {
-          process.stdout.write(chalk.magenta(`  ${skill.name}`) + chalk.dim(` - ${skill.description}\n`))
+          printSkillLine(skill, chalk.magenta, Boolean(opts.verbose))
         }
       }
     }
@@ -163,6 +181,213 @@ program
     } catch (err: any) {
       process.stdout.write(chalk.red(`Failed to create skill: ${err.message}\n`))
     }
+  })
+
+program
+  .command("skill:install")
+  .description("Install a skill from a bundled skill name, installed skill name, or local path")
+  .argument("<source>", "Bundled skill name, installed skill name, skill directory, or SKILL.md path")
+  .option("--scope <scope>", "Install scope: project|user", "project")
+  .option("--force", "Overwrite an existing destination if it already exists")
+  .action(async (source: string, opts: { scope: SkillInstallScope; force?: boolean }) => {
+    try {
+      const config = await resolveConfig()
+      const workspaceRoot = (program.opts() as GlobalOpts).workspace
+      const availableSkills = await listAllSkills(workspaceRoot, bundledSkills.filter(isSkillAvailable))
+      const normalizedScope = opts.scope === "user" ? "user" : "project"
+
+      const resolvedSource = await resolveSkillInstallSource(source, workspaceRoot, availableSkills)
+      const installRoot = resolveSkillInstallRoot(normalizedScope, workspaceRoot)
+      const destinationDir = path.join(installRoot, resolvedSource.skill.name)
+      const installed = await installSkillToScope(resolvedSource, destinationDir, {
+        force: Boolean(opts.force)
+      })
+
+      process.stdout.write(chalk.green(`Installed skill: ${installed.skill.name}\n`))
+      process.stdout.write(chalk.dim(`  from: ${resolvedSource.displayName}\n`))
+      process.stdout.write(chalk.dim(`  scope: ${normalizedScope}\n`))
+      process.stdout.write(chalk.dim(`  path: ${installed.skillFile}\n`))
+
+      const knownToolNames = createDefaultToolRegistry({ policy: toToolPolicy(config) })
+        .list()
+        .map((tool) => tool.name)
+      const doctorReport = inspectSkillDefinition(
+        {
+          ...installed.skill,
+          source: normalizedScope,
+          sourcePath: installed.skillFile
+        },
+        knownToolNames
+      )
+
+      if (doctorReport.findings.length > 0) {
+        process.stdout.write(chalk.yellow("\nSkill Doctor Warnings\n"))
+        process.stdout.write(chalk.dim("=".repeat(50)) + "\n")
+        for (const finding of doctorReport.findings) {
+          const colorize = finding.severity === "error" ? chalk.red : chalk.yellow
+          process.stdout.write(colorize(`  ${finding.severity}: ${finding.message}\n`))
+        }
+      }
+    } catch (error) {
+      process.stdout.write(chalk.red(`${error instanceof Error ? error.message : String(error)}\n`))
+      process.exitCode = 1
+    }
+  })
+
+program
+  .command("skill:export")
+  .description("Export a skill to a shareable directory")
+  .argument("<source>", "Bundled skill name, installed skill name, skill directory, or SKILL.md path")
+  .option("--out <path>", "Destination directory (defaults to .code-cli/exports/skills/<name>)")
+  .option("--force", "Overwrite an existing destination if it already exists")
+  .action(async (source: string, opts: { out?: string; force?: boolean }) => {
+    try {
+      const workspaceRoot = (program.opts() as GlobalOpts).workspace
+      await resolveConfig()
+      const availableSkills = await listAllSkills(workspaceRoot, bundledSkills.filter(isSkillAvailable))
+
+      const resolvedSource = await resolveSkillInstallSource(source, workspaceRoot, availableSkills)
+      const destinationDir = opts.out
+        ? path.resolve(workspaceRoot, opts.out)
+        : path.join(resolveSkillExportRoot(workspaceRoot), resolvedSource.skill.name)
+      const exported = await exportSkillToDir(resolvedSource, destinationDir, {
+        force: Boolean(opts.force)
+      })
+
+      process.stdout.write(chalk.green(`Exported skill: ${exported.skill.name}\n`))
+      process.stdout.write(chalk.dim(`  from: ${resolvedSource.displayName}\n`))
+      process.stdout.write(chalk.dim(`  path: ${destinationDir}\n`))
+      process.stdout.write(chalk.dim(`  install with: ccode skill:install ${destinationDir}\n`))
+    } catch (error) {
+      process.stdout.write(chalk.red(`${error instanceof Error ? error.message : String(error)}\n`))
+      process.exitCode = 1
+    }
+  })
+
+program
+  .command("skill:inspect")
+  .description("Inspect a single available skill")
+  .argument("<name>", "Skill name")
+  .option("--full-prompt", "Show the full prompt instead of a preview")
+  .action(async (name: string, opts: { fullPrompt?: boolean }) => {
+    await resolveConfig()
+    const workspaceRoot = (program.opts() as GlobalOpts).workspace
+    const availableSkills = await listAllSkills(workspaceRoot, bundledSkills.filter(isSkillAvailable))
+    const skill = availableSkills.find((entry) => entry.name === name)
+
+    if (!skill) {
+      process.stdout.write(chalk.red(`Skill not found: ${name}\n`))
+      process.exitCode = 1
+      return
+    }
+
+    process.stdout.write(chalk.bold(`\nSkill: ${skill.name}\n`))
+    process.stdout.write(`Source: ${skill.source}\n`)
+    process.stdout.write(`Description: ${skill.description}\n`)
+    if (skill.arguments && skill.arguments.length > 0) {
+      const args = skill.arguments
+        .map((arg) => `${arg.name}${arg.required ? "*" : ""}${arg.default ? `=${arg.default}` : ""}`)
+        .join(", ")
+      process.stdout.write(`Arguments: ${args}\n`)
+    }
+    if (skill.allowedTools && skill.allowedTools.length > 0) {
+      process.stdout.write(`Allowed tools: ${skill.allowedTools.join(", ")}\n`)
+    }
+    if (skill.paths && skill.paths.length > 0) {
+      process.stdout.write(`Paths: ${skill.paths.join(", ")}\n`)
+    }
+    if (skill.sourcePath) {
+      process.stdout.write(`Path: ${skill.sourcePath}\n`)
+    }
+
+    const promptText = opts.fullPrompt ? skill.prompt : previewPrompt(skill.prompt)
+    process.stdout.write("\nPrompt:\n")
+    process.stdout.write(`${promptText}\n`)
+    if (!opts.fullPrompt && promptText !== skill.prompt) {
+      process.stdout.write(chalk.dim("(prompt preview truncated, use --full-prompt to show all)\n"))
+    }
+  })
+
+program
+  .command("skill:doctor")
+  .description("Validate skills and report common issues")
+  .argument("[name]", "Optional skill name to validate")
+  .action(async (name?: string) => {
+    const config = await resolveConfig()
+    const workspaceRoot = (program.opts() as GlobalOpts).workspace
+    const knownToolNames = createDefaultToolRegistry({ policy: toToolPolicy(config) })
+      .list()
+      .map((tool) => tool.name)
+
+    const bundledReports = bundledSkills.map((skill) => inspectSkillDefinition(skill, knownToolNames))
+    const nonBundledReports = await inspectNonBundledSkills(workspaceRoot, knownToolNames)
+    const reports = [...bundledReports, ...nonBundledReports]
+      .filter((report) => !name || report.name === name)
+      .sort((left, right) => {
+        const sourceOrder = { bundled: 0, project: 1, user: 2 }
+        const orderDelta = sourceOrder[left.source] - sourceOrder[right.source]
+        if (orderDelta !== 0) return orderDelta
+        return left.name.localeCompare(right.name)
+      })
+
+    if (reports.length === 0) {
+      process.stdout.write(chalk.red(`No skills found${name ? ` for "${name}"` : ""}\n`))
+      process.exitCode = 1
+      return
+    }
+
+    process.stdout.write(chalk.bold("\nSkill Doctor\n"))
+    process.stdout.write(chalk.dim("=".repeat(50)) + "\n")
+
+    let okCount = 0
+    let warningCount = 0
+    let errorCount = 0
+
+    for (const report of reports) {
+      const hasError = report.findings.some((finding) => finding.severity === "error")
+      const hasWarning = report.findings.some((finding) => finding.severity === "warning")
+      if (hasError) errorCount += 1
+      else if (hasWarning) warningCount += 1
+      else okCount += 1
+
+      const status = hasError ? "ERROR" : hasWarning ? "WARN" : "OK"
+      const colorize = hasError ? chalk.red : hasWarning ? chalk.yellow : chalk.green
+      const formatted = formatSkillDoctorReport(report)
+      const [header, ...rest] = formatted.split("\n")
+      process.stdout.write(colorize(header ?? "") + "\n")
+      if (rest.length > 0) {
+        process.stdout.write(rest.join("\n") + "\n")
+      }
+    }
+
+    process.stdout.write(
+      `\nSummary: ${chalk.green(`${okCount} ok`)}, ${chalk.yellow(`${warningCount} warnings`)}, ${chalk.red(`${errorCount} errors`)}\n`
+    )
+
+    if (errorCount > 0) {
+      process.exitCode = 1
+    }
+  })
+
+const traceCmd = program.command("trace").description("Inspect trace output")
+
+traceCmd
+  .command("summary")
+  .description("Summarize a JSONL trace file")
+  .argument("<file>", "Path to a JSONL trace file")
+  .action(async (file: string) => {
+    const { promises: fs } = await import("node:fs")
+    await resolveConfig()
+    const workspaceRoot = (program.opts() as GlobalOpts).workspace
+    const workspace = new Workspace({ rootDir: workspaceRoot })
+    const filePath = path.isAbsolute(file) ? file : workspace.resolvePath(file)
+    const raw = await fs.readFile(filePath, "utf8")
+    const summary = summarizeTraceEvents(parseJsonlTrace(raw))
+    process.stdout.write(
+      formatTraceSummary(summary, {
+        filePath: formatRelativeTraceFile(workspaceRoot, filePath)
+      })
+    )
   })
 
 program
@@ -290,12 +515,16 @@ program
       opts.trace || typeof opts.traceFile === "string"
         ? await createJsonlTraceWriter(opts.traceFile ?? defaultTraceFile(root, `chat-${session.id}.jsonl`))
         : undefined
-    const trace = traceWriter ? traceWriter.write : undefined
+    const traceEvents: TraceEventRecord[] = []
+    const trace = (event: unknown) => {
+      traceEvents.push(event as TraceEventRecord)
+      if (traceEvents.length > 500) traceEvents.shift()
+      traceWriter?.write(event)
+    }
     const defaultStream = process.stdin.isTTY
     const isStream = opts.stream !== false ? defaultStream : opts.stream
-    const traceHistory: Array<{ step: number; name: string; resultChars: number; truncated: boolean }> = []
 
-    trace?.({
+    trace({
       type: "chat.start",
       mode: "chat",
       ts: Date.now(),
@@ -376,7 +605,7 @@ program
         }
 
         if (line === ":trace") {
-          printTraceSummary(traceHistory)
+          printTraceSummary(traceEvents)
           continue
         }
 
@@ -385,7 +614,7 @@ program
           continue
         }
 
-        trace?.({ type: "turn.start", ts: Date.now(), inputPreview: truncateForTrace(line) })
+        trace({ type: "turn.start", ts: Date.now(), inputPreview: truncateForTrace(line) })
         const out = await runAgentTurn({
           provider,
           model,
@@ -399,24 +628,11 @@ program
           ...(typeof opts.maxToolOutput === "number" ? { maxToolResultChars: opts.maxToolOutput } : {}),
           ...(typeof opts.maxTotalToolOutput === "number" ? { maxTotalToolResultChars: opts.maxTotalToolOutput } : {}),
           ...(confirm ? { confirm } : {}),
-          ...(trace ? { trace } : {}),
+          trace,
           ...(shouldSanitizeToolNames(config.llm.provider) ? { sanitizeToolNames: true } : {})
         })
 
-        const toolCallsInTurn = out.messages.filter(
-          (m) => m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0
-        ).length
-        if (toolCallsInTurn > 0) {
-          traceHistory.push({
-            step: traceHistory.length,
-            name: "turn",
-            resultChars: out.content.length,
-            truncated: false
-          })
-          if (traceHistory.length > 20) traceHistory.shift()
-        }
-
-        trace?.({
+        trace({
           type: "turn.end",
           ts: Date.now(),
           outputChars: out.content.length,
@@ -429,7 +645,7 @@ program
     } finally {
       process.removeListener("SIGINT", interruptHandler)
       rl.close()
-      trace?.({ type: "chat.end", mode: "chat", ts: Date.now(), sessionId: session.id, messageCount: session.messages.length })
+      trace({ type: "chat.end", mode: "chat", ts: Date.now(), sessionId: session.id, messageCount: session.messages.length })
       if (traceWriter) await traceWriter.close()
     }
   })
@@ -522,6 +738,38 @@ function isSkillAvailable(skill: { name: string; isEnabled?: () => boolean }): b
   return isFeatureEnabled(skill.name)
 }
 
+function printSkillLine(
+  skill: {
+    name: string
+    description: string
+    arguments?: Array<{ name: string; required?: boolean }>
+    allowedTools?: string[]
+    paths?: string[]
+    sourcePath?: string
+  },
+  colorize: (value: string) => string,
+  verbose: boolean
+): void {
+  process.stdout.write(colorize(`  ${skill.name}`) + chalk.dim(` - ${skill.description}\n`))
+
+  if (skill.arguments && skill.arguments.length > 0) {
+    const argsStr = skill.arguments.map((a) => `${a.name}${a.required ? "*" : "?"}`).join(", ")
+    process.stdout.write(chalk.dim(`    args: ${argsStr}\n`))
+  }
+
+  if (!verbose) return
+
+  if (skill.allowedTools && skill.allowedTools.length > 0) {
+    process.stdout.write(chalk.dim(`    allowed tools: ${skill.allowedTools.join(", ")}\n`))
+  }
+  if (skill.paths && skill.paths.length > 0) {
+    process.stdout.write(chalk.dim(`    paths: ${skill.paths.join(", ")}\n`))
+  }
+  if (skill.sourcePath) {
+    process.stdout.write(chalk.dim(`    path: ${skill.sourcePath}\n`))
+  }
+}
+
 function createSkillTemplate(name: string, description: string): string {
   return `---
 name: ${name}
@@ -555,6 +803,12 @@ Relevant code:
 Respond with the result.
 \`\`\`
 `
+}
+
+function previewPrompt(prompt: string, maxLines = 12): string {
+  const lines = prompt.replace(/\r\n/g, "\n").split("\n")
+  if (lines.length <= maxLines) return prompt
+  return `${lines.slice(0, maxLines).join("\n")}\n...`
 }
 
 function truncateForTrace(s: string, max = 200): string {
@@ -593,19 +847,12 @@ function findPreviousUserMessage(messages: LlmMessage[], toolMsg: LlmMessage): L
   return null
 }
 
-type TraceEntry = { step: number; name: string; resultChars: number; truncated: boolean }
-
-function printTraceSummary(history: TraceEntry[]): void {
-  if (history.length === 0) {
+function printTraceSummary(events: TraceEventRecord[]): void {
+  if (events.length === 0) {
     process.stdout.write(chalk.dim("No trace history\n"))
     return
   }
-  process.stdout.write(chalk.bold("\nTrace Summary:\n"))
-  for (const entry of history) {
-    const icon = entry.truncated ? chalk.yellow("⚠") : chalk.green("✓")
-    process.stdout.write(`${icon} Step ${entry.step}: ${entry.name} (${entry.resultChars} chars)\n`)
-  }
-  process.stdout.write("\n")
+  process.stdout.write(`\n${formatTraceSummary(summarizeTraceEvents(events))}`)
 }
 
 function printHelp(): void {

@@ -56,12 +56,12 @@
 
 ### Phase 3：验证与文档
 
-状态：进行中，已经基本补齐
+状态：已完成
 
 - Skill feature flags、loader、runtime、CLI 行为的单元测试已补齐。
 - README 已补充 skill 使用方式、目录约定、feature flags 和 shell 策略。
 - 新增了 bundled skill 与 project skill 的 eval case。
-- 需要继续确认完整 `eval / replay` 在当前工作区内稳定收敛。
+- 完整 `build + unit + eval + replay` 已在当前工作区稳定通过。
 
 ## 3. 与 claude-code-haha 的差距
 
@@ -87,10 +87,19 @@
 
 优先级：最高
 
-- 补更多 project/user skill 场景回归。
-- 明确 skill prompt 规范，避免 prompt 能力继续野生扩张。
-- 完善 `allowedTools` 的可观测性与失败提示。
-- 给 skill 执行增加更清晰的 trace 记录。
+- 已完成：
+  - `allowedTools` 阻断提示已带上 active skill 名称与来源。
+  - skill 执行已补 `invoke / resolve / render / activate / clear` trace 事件。
+  - CLI 已补 user skill 场景与 `skills --verbose` 元数据展示。
+  - 新增 `trace summary` 与 `skill:inspect` 命令，补齐 trace/skill 的可观察性。
+  - 仓库已内置多份 project skill 样例，便于演示与继续扩展。
+  - 新增 `skill:doctor`，可以校验模板语法、未知工具、未声明占位符与解析失败。
+  - 新增 `skill:install`，可以把 bundled skill 落地成 project/user skill，或从本地目录安装 skill。
+  - 新增 `skill:export`，可以把 bundled/project/user skill 导出成可分享目录，并与 `skill:install` 组成闭环。
+- 下一步：
+  - 继续补更多 project/user skill 回归样本。
+  - 明确 skill prompt 规范，避免 prompt 能力继续野生扩张。
+  - 考虑加入 skill registry/index 或 manifest，支持更清晰的分享元数据。
 
 ### Stage B：CLI 产品化
 
@@ -114,8 +123,8 @@
 
 1. 完成 Skill Runtime 验证收尾，确保 `build + unit + eval + replay` 稳定通过。
 2. 增补 3 到 5 个真实 project skill 示例，验证模板边界和加载规则。
-3. 收口 CLI 文案与配置体验，让 skills 成为正式公开能力。
-4. 只有在 skill 机制稳定后，再评估 MCP 或更强交互壳。
+3. 收口 trace/skills 输出，让 skills 成为更易观察的正式公开能力。
+4. 给 skills 增加最小 manifest/registry 流，再评估 MCP 或更强交互壳。
 
 ## 6. 完成定义
 

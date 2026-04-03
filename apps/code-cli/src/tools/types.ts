@@ -8,6 +8,7 @@ export type ToolContext = {
   confirm?: ToolConfirmFn
   messages?: LlmMessage[]
   currentUserInput?: string
+  trace?: (event: unknown) => void
 }
 
 export type ToolDefinition<I = unknown, O = unknown> = {

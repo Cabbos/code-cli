@@ -51,3 +51,16 @@ export function getAllowedTools(): string[] | undefined {
   const skill = getActiveSkill()
   return skill?.allowedTools
 }
+
+export function getActiveSkillSummary():
+  | { name: string; source: SkillDefinition["source"]; allowedTools?: string[] }
+  | undefined {
+  const skill = getActiveSkill()
+  if (!skill) return undefined
+
+  return {
+    name: skill.name,
+    source: skill.source,
+    ...(skill.allowedTools ? { allowedTools: skill.allowedTools } : {})
+  }
+}

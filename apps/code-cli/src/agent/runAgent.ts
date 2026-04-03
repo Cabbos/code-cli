@@ -3,7 +3,7 @@ import { LlmMessage, LlmProvider, LlmTool, LlmToolCall } from "../llm/types"
 import { ToolRegistry } from "../tools/registry"
 import { ToolConfirmFn } from "../tools/types"
 import { createHash } from "node:crypto"
-import { setActiveSkill, clearActiveSkill } from "../skills/skillContext"
+import { setActiveSkill, clearActiveSkill, getActiveSkill } from "../skills/skillContext"
 import { SkillDefinition } from "../skills/types"
 
 export type RunAgentParams = {
@@ -109,7 +109,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<RunAgent
     params.messages.push({ role: "assistant", content: res.content, toolCalls: res.toolCalls })
 
     if (!res.toolCalls.length) {
-      clearActiveSkill() // Clear skill context when turn ends
+      clearActiveSkillWithTrace(params.trace, "assistant_response")
       return { content: res.content, messages: params.messages }
     }
 
@@ -136,7 +136,7 @@ export async function runAgentTurn(params: RunAgentTurnParams): Promise<RunAgent
     }
   }
 
-  clearActiveSkill() // Clear skill context when max steps reached
+  clearActiveSkillWithTrace(params.trace, "max_steps")
   return { content: "Agent stopped: max steps reached", messages: params.messages }
 }
 
@@ -162,7 +162,8 @@ async function executeToolCall(
       workspace,
       ...(confirm ? { confirm } : {}),
       ...(limits?.messages ? { messages: limits.messages } : {}),
-      ...(typeof limits?.currentUserInput === "string" ? { currentUserInput: limits.currentUserInput } : {})
+      ...(typeof limits?.currentUserInput === "string" ? { currentUserInput: limits.currentUserInput } : {}),
+      ...(limits?.trace ? { trace: limits.trace } : {})
     }
     if (limits && limits.totalToolChars >= limits.maxTotalToolResultChars) {
       const content = stableJson({
@@ -193,9 +194,24 @@ async function executeToolCall(
 
     // If Skill tool was invoked, set the active skill context for subsequent tool calls
     if (isSkillTool && typeof result === "object" && result !== null && "ok" in result) {
-      const skillResult = result as { ok: boolean; skill?: SkillDefinition }
+      const skillResult = result as {
+        ok: boolean
+        skill?: SkillDefinition
+        warnings?: string[]
+        prompt?: string
+      }
       if (skillResult.ok && skillResult.skill) {
         setActiveSkill(skillResult.skill)
+        limits?.trace?.({
+          type: "skill.activate",
+          step: limits.step,
+          toolCallId: tc.id,
+          skillName: skillResult.skill.name,
+          source: skillResult.skill.source,
+          allowedTools: skillResult.skill.allowedTools ?? [],
+          warningCount: skillResult.warnings?.length ?? 0,
+          promptChars: typeof skillResult.prompt === "string" ? skillResult.prompt.length : 0
+        })
       }
     }
 
@@ -272,6 +288,23 @@ function sanitizeForTrace(v: unknown, depth = 0): unknown {
 
 function stableJson(v: unknown): string {
   return JSON.stringify(v, null, 2)
+}
+
+function clearActiveSkillWithTrace(
+  trace: ((event: unknown) => void) | undefined,
+  reason: "assistant_response" | "max_steps"
+): void {
+  const activeSkill = getActiveSkill()
+  if (activeSkill) {
+    trace?.({
+      type: "skill.clear",
+      ts: Date.now(),
+      reason,
+      skillName: activeSkill.name,
+      source: activeSkill.source
+    })
+  }
+  clearActiveSkill()
 }
 
 function sanitizeToolResultForMessage(toolName: string, result: unknown): unknown {

@@ -175,6 +175,27 @@ You can run the CLI directly via the local bin shim:
 
 # List available skills
 ./node_modules/.bin/ccode skills
+./node_modules/.bin/ccode skills --verbose
+
+# Inspect a single skill
+./node_modules/.bin/ccode skill:inspect simplify
+
+# Validate one or all skills
+./node_modules/.bin/ccode skill:doctor
+./node_modules/.bin/ccode skill:doctor review-typescript
+
+# Install a bundled skill into the current project
+./node_modules/.bin/ccode skill:install simplify
+
+# Install a local skill directory into user scope
+./node_modules/.bin/ccode skill:install /path/to/my-skill --scope user
+
+# Export a skill into a shareable directory
+./node_modules/.bin/ccode skill:export simplify
+./node_modules/.bin/ccode skill:export review-typescript --out ./shared/review-typescript
+
+# Summarize a trace file
+./node_modules/.bin/ccode trace summary .code-cli/traces/run-latest.jsonl
 
 # Create a new project skill template
 ./node_modules/.bin/ccode skill:create my-skill "One-line description"
@@ -190,6 +211,12 @@ You can run the CLI directly via the local bin shim:
 - Project skills live in `<workspace>/.code-cli/skills/<name>/SKILL.md`.
 - User skills live in `~/.code-cli/skills/<name>/SKILL.md`.
 - `skills` only shows currently available skills after frontmatter and feature-flag filtering.
+- `skills --verbose` shows extra metadata such as `allowed-tools`, `paths`, and source file paths.
+- `skill:inspect <name>` prints a single skill's details and prompt preview.
+- `skill:doctor [name]` validates skill definitions and flags common issues such as unknown tools, unsupported template tags, and undeclared placeholders.
+- `skill:install <source>` materializes a bundled skill or copies a local skill into `project` or `user` scope.
+- `skill:export <source>` writes a shareable skill directory that can later be installed with `skill:install`.
+- The repo includes project skill examples under [apps/code-cli/.code-cli/skills](/Users/cabbos/project/projects/code-monorepo/apps/code-cli/.code-cli/skills).
 
 Example `SKILL.md` shape:
 
@@ -219,6 +246,11 @@ Feature flags:
 - `features.flags.<skill_name>` or `CODECLI_FEATURE_<SKILL_NAME>` can disable an individual skill.
 - `features.flags.skill_shell_execution` or `CODECLI_FEATURE_SKILL_SHELL_EXECUTION` controls shell interpolation inside skill prompts.
 - Shell interpolation is disabled by default.
+
+### Trace Summary
+
+- `--trace` writes JSONL trace output during `run` and `chat`.
+- `trace summary <file>` reads a trace file and summarizes turns, tools, skills, warnings, and errors.
 
 ### Options & Security
 

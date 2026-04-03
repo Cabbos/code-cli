@@ -27,6 +27,13 @@ const CONDITIONAL_BLOCK_PATTERN = /\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g
 const PLACEHOLDER_PATTERN = /\{\{(\w+)\}\}/g
 const CODE_BLOCK_PATTERN = /```([^\n`]*)\n([\s\S]*?)```/m
 
+function traceSkillEvent(ctx: ToolContext, event: Record<string, unknown>): void {
+  ctx.trace?.({
+    ...event,
+    ts: Date.now()
+  })
+}
+
 function defaultArgumentValues(skill: SkillDefinition): Record<string, string> {
   const values: Record<string, string> = {}
   for (const arg of skill.arguments ?? []) {
@@ -329,22 +336,60 @@ export function createSkillTool(
 
     async invoke(input: SkillToolInput, ctx: ToolContext): Promise<SkillToolOutput> {
       const touchedFiles = opts?.touchedFiles ?? []
+      const userMessage = resolveUserMessage(input, ctx)
+      traceSkillEvent(ctx, {
+        type: "skill.invoke",
+        requestedName: input.name,
+        argumentKeys: Object.keys(input.arguments ?? {}).sort(),
+        userMessageChars: userMessage.length
+      })
       const skill = await findAvailableSkill(input.name, skillMap, ctx, touchedFiles)
 
       if (!skill) {
+        traceSkillEvent(ctx, {
+          type: "skill.error",
+          stage: "resolve",
+          requestedName: input.name,
+          error: "not_found"
+        })
         return {
           ok: false,
           error: `Skill not found: "${input.name}". Available skills: ${(await availableSkillNames(skillMap, ctx.workspace.root)).join(", ") || "none"}`
         }
       }
 
+      traceSkillEvent(ctx, {
+        type: "skill.resolve",
+        requestedName: input.name,
+        skillName: skill.name,
+        source: skill.source,
+        allowedTools: skill.allowedTools ?? [],
+        sourcePath: skill.sourcePath
+      })
+
       const availability = isSkillEnabledForContext(skill, touchedFiles)
       if (!availability.ok) {
+        traceSkillEvent(ctx, {
+          type: "skill.error",
+          stage: "availability",
+          requestedName: input.name,
+          skillName: skill.name,
+          source: skill.source,
+          error: availability.error
+        })
         return { ok: false, error: availability.error }
       }
 
       const validationErrors = validateArguments(skill, input.arguments)
       if (validationErrors.length > 0) {
+        traceSkillEvent(ctx, {
+          type: "skill.error",
+          stage: "arguments",
+          requestedName: input.name,
+          skillName: skill.name,
+          source: skill.source,
+          errors: validationErrors
+        })
         return {
           ok: false,
           error: `Invalid arguments for skill "${skill.name}": ${validationErrors.join(", ")}`
@@ -354,16 +399,34 @@ export function createSkillTool(
       const runtimeValues = buildRuntimeValues(skill, input, ctx)
       const rendered = renderSkillTemplate(skill.prompt, runtimeValues)
       let promptBody = rendered.prompt
+      const shellExecutionEnabled = isFeatureEnabled("skill_shell_execution")
+      const shellCommandsDetected = hasShellCommands(promptBody)
 
-      if (isFeatureEnabled("skill_shell_execution") && hasShellCommands(promptBody)) {
+      if (shellExecutionEnabled && shellCommandsDetected) {
         promptBody = await executeShellCommandsInPrompt(promptBody, {
           cwd: ctx.workspace.root
         })
       }
 
+      const finalPrompt = buildContextPrompt(skill, promptBody, userMessage)
+
+      traceSkillEvent(ctx, {
+        type: "skill.render",
+        requestedName: input.name,
+        skillName: skill.name,
+        source: skill.source,
+        runtimeValueKeys: Object.keys(runtimeValues).sort(),
+        warningCount: rendered.warnings.length,
+        warnings: rendered.warnings,
+        shellExecutionEnabled,
+        shellCommandsDetected,
+        usedShellExecution: shellExecutionEnabled && shellCommandsDetected,
+        promptChars: finalPrompt.length
+      })
+
       return {
         ok: true,
-        prompt: buildContextPrompt(skill, promptBody, resolveUserMessage(input, ctx)),
+        prompt: finalPrompt,
         skill,
         ...(rendered.warnings.length > 0 ? { warnings: rendered.warnings } : {})
       }

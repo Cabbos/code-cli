@@ -148,6 +148,27 @@ const result = foo ? foo : bar
     }
   })
 
+  it("emits skill trace events with runtime metadata", async () => {
+    const events: Array<Record<string, unknown>> = []
+    const tool = createSkillTool(bundledSkills)
+
+    const result = await tool.invoke(
+      {
+        name: "remember",
+        userMessage: "Track this decision"
+      },
+      {
+        workspace: new Workspace({ rootDir: process.cwd() }),
+        trace: (event) => events.push(event as Record<string, unknown>)
+      }
+    )
+
+    expect(result.ok).toBe(true)
+    expect(events.map((event) => event.type)).toEqual(["skill.invoke", "skill.resolve", "skill.render"])
+    expect(events[1]?.skillName).toBe("remember")
+    expect(events[2]?.runtimeValueKeys).toEqual(expect.arrayContaining(["content", "user_message"]))
+  })
+
   it("passes messages and current input through runAgentTurn and clears skill context", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "code-cli-run-agent-"))
     tempDirs.push(root)

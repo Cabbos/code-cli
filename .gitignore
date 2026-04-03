@@ -10,5 +10,5 @@ pnpm-debug.log*
 .code-cli
 !apps/code-cli/.code-cli/
 !apps/code-cli/.code-cli/skills/
-!apps/code-cli/.code-cli/skills/project-echo/
-!apps/code-cli/.code-cli/skills/project-echo/SKILL.md
+!apps/code-cli/.code-cli/skills/**/
+!apps/code-cli/.code-cli/skills/**/SKILL.md
